@@ -255,6 +255,21 @@ export default function Contacts() {
     }
   };
 
+  const handleSendMessage = (contact: Contact) => {
+    // Create WhatsApp message link
+    const phoneNumber = contact.phone.replace(/[^\d]/g, ''); // Remove non-numeric characters
+    const message = `Hi ${contact.firstName}, I hope you're doing well!`;
+    const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+    
+    // Open WhatsApp in new tab
+    window.open(whatsappUrl, '_blank');
+    
+    toast({
+      title: "Message Sent",
+      description: `Opening WhatsApp to send message to ${contact.firstName}`,
+    });
+  };
+
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
     return group?.name || "";
@@ -559,10 +574,22 @@ export default function Contacts() {
                     ))}
                   </div>
                   <div className="flex space-x-2">
-                    <Button variant="ghost" size="sm" className="text-primary">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-primary hover:bg-primary/10"
+                      onClick={() => handleSendMessage(contact)}
+                      title="Send WhatsApp Message"
+                    >
                       <MessageCircle className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="text-gray-400">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-gray-600 hover:bg-gray-100"
+                      onClick={() => handleEditContact(contact)}
+                      title="Edit Contact"
+                    >
                       <Edit className="h-4 w-4" />
                     </Button>
                   </div>

@@ -9,9 +9,10 @@ import { isDuplicateContact } from "@/utils/duplicate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { CloudUpload, Check, Clock, X, Save, Users } from "lucide-react";
+import { CloudUpload, Check, Clock, X, Save, Users, Sparkles, Brain, Zap, FileImage, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 
 interface UploadResult {
   id: string;
@@ -184,11 +185,23 @@ export default function BulkUploads() {
     switch (status) {
       case "uploading":
       case "processing":
-        return <Clock className="h-4 w-4 text-yellow-600" />;
+        return (
+          <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
+            <Clock className="h-3 w-3 text-yellow-600 animate-spin" />
+          </div>
+        );
       case "completed":
-        return <Check className="h-4 w-4 text-green-600" />;
+        return (
+          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+            <Check className="h-3 w-3 text-green-600" />
+          </div>
+        );
       case "error":
-        return <X className="h-4 w-4 text-red-600" />;
+        return (
+          <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+            <AlertCircle className="h-3 w-3 text-red-600" />
+          </div>
+        );
       default:
         return null;
     }
@@ -213,13 +226,13 @@ export default function BulkUploads() {
     switch (status) {
       case "uploading":
       case "processing":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-yellow-50 text-yellow-700 border-yellow-200";
       case "completed":
-        return "bg-green-100 text-green-800";
+        return "bg-green-50 text-green-700 border-green-200";
       case "error":
-        return "bg-red-100 text-red-800";
+        return "bg-red-50 text-red-700 border-red-200";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-50 text-gray-700 border-gray-200";
     }
   };
 
@@ -228,19 +241,67 @@ export default function BulkUploads() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="md:flex md:items-center md:justify-between">
           <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">Bulk Upload</h2>
-            <p className="mt-1 text-sm text-gray-500">Upload multiple business card images for OCR processing</p>
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <Sparkles className="text-white h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-bold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent sm:text-4xl sm:truncate">
+                  AI Card Scanner
+                </h2>
+                <p className="mt-1 text-lg text-gray-600">Powered by Gemini 1.5 Flash • Extract data from multiple business cards instantly</p>
+              </div>
+            </div>
+            
+            {/* AI Features Banner */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+                <Brain className="h-8 w-8 text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-blue-900">AI-Powered</h3>
+                  <p className="text-sm text-blue-700">Advanced text recognition</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200">
+                <Zap className="h-8 w-8 text-green-600" />
+                <div>
+                  <h3 className="font-semibold text-green-900">Lightning Fast</h3>
+                  <p className="text-sm text-green-700">Process up to 10 cards</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200">
+                <CheckCircle2 className="h-8 w-8 text-amber-600" />
+                <div>
+                  <h3 className="font-semibold text-amber-900">Smart Detection</h3>
+                  <p className="text-sm text-amber-700">Automatic duplicate check</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         {/* Upload Zone */}
-        <div className="mt-6">
-          <Card>
-            <CardContent className="p-6">
+        <div className="mt-8">
+          <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50">
+            <CardContent className="p-0">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <FileImage className="h-6 w-6" />
+                    <h3 className="text-lg font-semibold">Smart Upload Zone</h3>
+                  </div>
+                  <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
+                    {uploadResults.length > 0 ? `${uploadResults.length}/10 files` : 'Ready'}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Upload Area */}
               <div 
-                className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-primary transition-colors"
+                className="p-8 border-2 border-dashed border-purple-200 m-6 rounded-2xl hover:border-purple-400 transition-all duration-300 hover:bg-purple-50/50"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -248,31 +309,38 @@ export default function BulkUploads() {
                   if (files.length > 0) handleFileSelect(files);
                 }}
               >
-                <div className="mx-auto w-16 h-16 flex items-center justify-center bg-gray-100 rounded-full mb-4">
-                  <CloudUpload className="text-2xl text-gray-400 h-8 w-8" />
+                <div className="text-center">
+                  <div className="mx-auto w-20 h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mb-6">
+                    <CloudUpload className="text-purple-600 h-10 w-10" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Drop Your Business Cards Here</h3>
+                  <p className="text-gray-600 mb-6 max-w-md mx-auto">Our AI will automatically extract contact information from your business card images with incredible accuracy</p>
+                  
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                    <Button 
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.multiple = true;
+                        input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                        input.onchange = (e) => {
+                          const files = (e.target as HTMLInputElement).files;
+                          if (files) handleFileSelect(files);
+                        };
+                        input.click();
+                      }}
+                      disabled={uploading}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-3 rounded-xl font-semibold shadow-lg"
+                    >
+                      <CloudUpload className="h-5 w-5 mr-2" />
+                      {uploading ? 'Processing...' : 'Choose Files'}
+                    </Button>
+                    <div className="text-center">
+                      <p className="text-sm text-gray-500">Or drag and drop</p>
+                      <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 5MB each • Max 10 files</p>
+                    </div>
+                  </div>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Business Cards</h3>
-                <p className="text-gray-500 mb-4">Drag and drop up to 10 images, or click to browse</p>
-                <Button 
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.multiple = true;
-                    input.accept = 'image/*';
-                    input.onchange = (e) => {
-                      const files = (e.target as HTMLInputElement).files;
-                      if (files) handleFileSelect(files);
-                    };
-                    input.click();
-                  }}
-                  disabled={uploading}
-                  variant="outline"
-                  className="text-primary border-primary hover:bg-primary/10"
-                >
-                  <CloudUpload className="h-4 w-4 mr-2" />
-                  Select Files
-                </Button>
-                <p className="mt-2 text-xs text-gray-500">PNG, JPG up to 5MB each</p>
               </div>
             </CardContent>
           </Card>
@@ -280,33 +348,57 @@ export default function BulkUploads() {
 
         {/* Processing Results */}
         {uploadResults.length > 0 && (
-          <div className="mt-6">
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-6">Processing Results</h3>
+          <div className="mt-8">
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+              <CardContent className="p-0">
+                {/* Results Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Brain className="h-6 w-6" />
+                      <h3 className="text-lg font-semibold">AI Processing Results</h3>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="text-sm">
+                        <span className="font-medium">{uploadResults.filter(r => r.status === 'completed').length}</span>
+                        <span className="opacity-75"> / {uploadResults.length} completed</span>
+                      </div>
+                      <Progress 
+                        value={(uploadResults.filter(r => r.status === 'completed').length / uploadResults.length) * 100}
+                        className="w-24 h-2"
+                      />
+                    </div>
+                  </div>
+                </div>
                 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="p-6">
+                
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {uploadResults.map((result) => (
-                    <div key={result.id} className="border border-gray-200 rounded-lg p-4">
+                    <div key={result.id} className="bg-white border-2 border-gray-100 rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
                       <div className="flex items-start space-x-4">
                         <div className="flex-shrink-0">
                           {result.imageUrl ? (
-                            <img 
-                              src={result.imageUrl} 
-                              alt="Business card" 
-                              className="w-24 h-16 object-cover rounded"
-                            />
+                            <div className="relative">
+                              <img 
+                                src={result.imageUrl} 
+                                alt="Business card" 
+                                className="w-28 h-18 object-cover rounded-xl shadow-md"
+                              />
+                              <div className="absolute -top-2 -right-2">
+                                {getStatusIcon(result.status)}
+                              </div>
+                            </div>
                           ) : (
-                            <div className="w-24 h-16 bg-gray-200 rounded flex items-center justify-center">
-                              <CloudUpload className="h-6 w-6 text-gray-400" />
+                            <div className="w-28 h-18 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center">
+                              <CloudUpload className="h-8 w-8 text-gray-400" />
                             </div>
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-medium text-gray-900">{result.file.name}</p>
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(result.status)}`}>
-                              {getStatusIcon(result.status)}
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{result.file.name}</p>
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(result.status)}`}>
                               <span className="ml-1">{getStatusText(result.status)}</span>
                             </span>
                           </div>
@@ -395,6 +487,7 @@ export default function BulkUploads() {
                       Assign to Group
                     </Button>
                   </div>
+                </div>
                 </div>
               </CardContent>
             </Card>
