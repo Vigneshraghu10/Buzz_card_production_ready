@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(resourceOwnerId) {
+      return isSignedIn() && request.auth.uid == resourceOwnerId;
+    }
+
+    // Users can read/write their own user doc
+    match /users/{uid} {
+      allow read, create: if isSignedIn() && request.auth.uid == uid;
+      allow update, delete: if isOwner(resource.data.ownerId) || (isSignedIn() && request.auth.uid == uid);
+    }
+
+    // Collections that store app data with ownerId
+    match /{collectionName}/{docId} where
+      collectionName in ['contacts','groups','templates','scannedCards','digitalCards','settings'] {
+
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+
+      allow read, update, delete: if isSignedIn() && isOwner(resource.data.ownerId);
+    }
+
+    // Public share page: allow read of specific public fields by publicId
+    match /digitalCards/{docId} {
+      allow read: if isSignedIn() && isOwner(resource.data.ownerId)
+                  || (request.resource == null && resource.data.isPublic == true);
+      allow create, update, delete: if isSignedIn() && isOwner(resource.data.ownerId);
+    }
+  }
+}
