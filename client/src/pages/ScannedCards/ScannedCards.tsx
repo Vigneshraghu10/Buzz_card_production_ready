@@ -3,8 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { uploadToStorage } from "@/utils/upload";
-import { callVisionAPI } from "@/utils/ocr";
-import { parseOcrToContact, ParsedContact } from "@/utils/parse";
+import { callGeminiAPI } from "@/utils/ocr";
+import type { ParsedContact } from "@/utils/parse";
 import { isDuplicateContact } from "@/utils/duplicate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,9 +89,8 @@ export default function ScannedCards() {
         `users/${user!.uid}/scans/${Date.now()}-${file.name}`
       );
 
-      // Call Vision API
-      const ocrText = await callVisionAPI(imageUrl);
-      const extractedData = parseOcrToContact(ocrText);
+      // Call Gemini API for enhanced data extraction
+      const extractedData = await callGeminiAPI(imageUrl);
 
       // Save to Firestore
       await addDoc(collection(db, "scannedCards"), {

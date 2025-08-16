@@ -28,13 +28,13 @@ A comprehensive React application for managing WhatsApp Business digital visitin
 
 ### 📤 Bulk Upload & OCR
 - Upload up to 10 business card images
-- Google Cloud Vision API integration
-- Automatic text extraction and parsing
+- Gemini 1.5 Flash LLM integration for enhanced data extraction
+- Automatic structured data extraction and parsing
 - Batch contact creation
 
 ### 📸 Single Card Scanning
 - Individual business card processing
-- OCR text extraction
+- AI-powered OCR with structured data extraction
 - Edit extracted data before saving
 - Direct contact creation
 
@@ -70,7 +70,7 @@ A comprehensive React application for managing WhatsApp Business digital visitin
 - **Firebase Authentication** for user management
 - **Firebase Firestore** for data persistence
 - **Firebase Storage** for file uploads
-- **Google Cloud Vision API** for OCR processing
+- **Gemini 1.5 Flash LLM** for AI-powered OCR and data extraction
 
 ### Additional Libraries
 - **qrcode** for QR code generation
@@ -83,7 +83,7 @@ A comprehensive React application for managing WhatsApp Business digital visitin
 ### Prerequisites
 - Node.js 18+ 
 - Firebase project
-- Google Cloud Vision API key
+- Google Gemini API key
 
 ### Firebase Configuration
 
@@ -106,5 +106,5 @@ VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 
-VITE_GCLOUD_VISION_API_KEY=your_google_cloud_vision_api_key
+VITE_GEMINI_API_KEY=your_gemini_api_key
 VITE_APP_PUBLIC_BASE_URL=https://your-domain.com
