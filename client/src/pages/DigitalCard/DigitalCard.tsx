@@ -38,6 +38,7 @@ export default function DigitalCard() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
   const [digitalCard, setDigitalCard] = useState<DigitalCard>({
     ownerId: user?.uid || "",
@@ -118,21 +119,45 @@ export default function DigitalCard() {
   };
 
   const handleAvatarUpload = async (file: File) => {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file (JPG, PNG, etc.)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Please select an image smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploading(true);
     try {
-      const avatarUrl = await uploadToStorage(file, `users/${user!.uid}/avatar.jpg`);
+      const timestamp = Date.now();
+      const avatarUrl = await uploadToStorage(file, `users/${user!.uid}/avatar-${timestamp}.${file.name.split('.').pop()}`);
       setDigitalCard(prev => ({ ...prev, avatarUrl }));
       
       toast({
         title: "Success",
-        description: "Profile picture updated",
+        description: "Profile picture updated successfully",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading avatar:", error);
       toast({
-        title: "Error",
-        description: "Failed to upload profile picture",
+        title: "Upload Error",
+        description: error.message || "Failed to upload profile picture. Please check your internet connection and try again.",
         variant: "destructive",
       });
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -279,10 +304,11 @@ export default function DigitalCard() {
                     <div className="flex-1">
                       <Button
                         variant="outline"
+                        disabled={uploading}
                         onClick={() => {
                           const input = document.createElement('input');
                           input.type = 'file';
-                          input.accept = 'image/*';
+                          input.accept = 'image/jpeg,image/png,image/gif,image/webp';
                           input.onchange = (e) => {
                             const files = (e.target as HTMLInputElement).files;
                             if (files && files[0]) handleAvatarUpload(files[0]);
@@ -291,7 +317,7 @@ export default function DigitalCard() {
                         }}
                       >
                         <Camera className="h-4 w-4 mr-2" />
-                        Change Photo
+                        {uploading ? "Uploading..." : "Change Photo"}
                       </Button>
                       <p className="mt-1 text-sm text-gray-500">JPG, PNG up to 5MB</p>
                     </div>

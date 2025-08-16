@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Grid3X3, List, MoreVertical, Edit, MessageCircle } from "lucide-react";
+import { Plus, Search, Grid3X3, List, MoreVertical, Edit, MessageCircle, Trash2, Users2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 interface Contact {
   id: string;
@@ -45,6 +46,10 @@ export default function Contacts() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [showAddModal, setShowAddModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [selectedContactForGroup, setSelectedContactForGroup] = useState<Contact | null>(null);
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -120,30 +125,47 @@ export default function Contacts() {
     e.preventDefault();
     
     try {
-      // Check for duplicates
-      const isDupe = await isDuplicateContact(user!.uid, formData.email, formData.phone);
-      if (isDupe) {
-        toast({
-          title: "Duplicate Contact",
-          description: "A contact with this email or phone already exists",
-          variant: "destructive",
+      if (editingContact) {
+        // Update existing contact
+        await updateDoc(doc(db, "contacts", editingContact.id), {
+          ...formData,
+          email: formData.email.toLowerCase(),
         });
-        return;
+        
+        toast({
+          title: "Success",
+          description: "Contact updated successfully",
+        });
+        
+        setShowEditModal(false);
+        setEditingContact(null);
+      } else {
+        // Check for duplicates
+        const isDupe = await isDuplicateContact(user!.uid, formData.email, formData.phone);
+        if (isDupe) {
+          toast({
+            title: "Duplicate Contact",
+            description: "A contact with this email or phone already exists",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        await addDoc(collection(db, "contacts"), {
+          ...formData,
+          email: formData.email.toLowerCase(),
+          ownerId: user!.uid,
+          createdAt: serverTimestamp(),
+        });
+
+        toast({
+          title: "Success",
+          description: "Contact added successfully",
+        });
+        
+        setShowAddModal(false);
       }
 
-      await addDoc(collection(db, "contacts"), {
-        ...formData,
-        email: formData.email.toLowerCase(),
-        ownerId: user!.uid,
-        createdAt: serverTimestamp(),
-      });
-
-      toast({
-        title: "Success",
-        description: "Contact added successfully",
-      });
-
-      setShowAddModal(false);
       setFormData({
         firstName: "",
         lastName: "",
@@ -156,10 +178,78 @@ export default function Contacts() {
       });
       fetchData();
     } catch (error) {
-      console.error("Error adding contact:", error);
+      console.error("Error saving contact:", error);
       toast({
         title: "Error",
-        description: "Failed to add contact",
+        description: "Failed to save contact",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditContact = (contact: Contact) => {
+    setEditingContact(contact);
+    setFormData({
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      phone: contact.phone,
+      email: contact.email,
+      company: contact.company,
+      services: contact.services,
+      address: contact.address || "",
+      groupIds: contact.groupIds,
+    });
+    setShowEditModal(true);
+  };
+
+  const handleDeleteContact = async (contactId: string) => {
+    try {
+      await deleteDoc(doc(db, "contacts", contactId));
+      toast({
+        title: "Success",
+        description: "Contact deleted successfully",
+      });
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting contact:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete contact",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAssignToGroup = (contact: Contact) => {
+    setSelectedContactForGroup(contact);
+    setShowGroupModal(true);
+  };
+
+  const handleGroupAssignment = async (groupId: string) => {
+    if (!selectedContactForGroup) return;
+    
+    try {
+      const updatedGroupIds = selectedContactForGroup.groupIds.includes(groupId)
+        ? selectedContactForGroup.groupIds.filter(id => id !== groupId)
+        : [...selectedContactForGroup.groupIds, groupId];
+      
+      await updateDoc(doc(db, "contacts", selectedContactForGroup.id), {
+        groupIds: updatedGroupIds,
+      });
+      
+      toast({
+        title: "Success",
+        description: "Group assignment updated",
+      });
+      
+      setShowGroupModal(false);
+      setSelectedContactForGroup(null);
+      fetchData();
+    } catch (error) {
+      console.error("Error updating group assignment:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update group assignment",
         variant: "destructive",
       });
     }
@@ -204,7 +294,23 @@ export default function Contacts() {
             <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">Contacts</h2>
           </div>
           <div className="mt-4 flex md:mt-0 md:ml-4">
-            <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+            <Dialog open={showAddModal || showEditModal} onOpenChange={(open) => {
+              if (!open) {
+                setShowAddModal(false);
+                setShowEditModal(false);
+                setEditingContact(null);
+                setFormData({
+                  firstName: "",
+                  lastName: "",
+                  phone: "",
+                  email: "",
+                  company: "",
+                  services: "",
+                  address: "",
+                  groupIds: [],
+                });
+              }
+            }}>
               <DialogTrigger asChild>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
@@ -213,7 +319,7 @@ export default function Contacts() {
               </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Add New Contact</DialogTitle>
+                  <DialogTitle>{editingContact ? "Edit Contact" : "Add New Contact"}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -285,11 +391,45 @@ export default function Contacts() {
                       rows={2}
                     />
                   </div>
+                  <div>
+                    <Label htmlFor="groups">Assign to Groups (Optional)</Label>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {groups.map(group => (
+                        <label key={group.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            checked={formData.groupIds.includes(group.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData(prev => ({ ...prev, groupIds: [...prev.groupIds, group.id] }));
+                              } else {
+                                setFormData(prev => ({ ...prev, groupIds: prev.groupIds.filter(id => id !== group.id) }));
+                              }
+                            }}
+                          />
+                          <span className="text-sm">{group.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex justify-end space-x-4">
-                    <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>
+                    <Button type="button" variant="outline" onClick={() => {
+                      setShowAddModal(false);
+                      setEditingContact(null);
+                      setFormData({
+                        firstName: "",
+                        lastName: "",
+                        phone: "",
+                        email: "",
+                        company: "",
+                        services: "",
+                        address: "",
+                        groupIds: [],
+                      });
+                    }}>
                       Cancel
                     </Button>
-                    <Button type="submit">Add Contact</Button>
+                    <Button type="submit">{editingContact ? "Update Contact" : "Add Contact"}</Button>
                   </div>
                 </form>
               </DialogContent>
@@ -378,9 +518,31 @@ export default function Contacts() {
                         </p>
                         <p className="text-sm text-gray-500">{contact.company}</p>
                       </div>
-                      <Button variant="ghost" size="sm">
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEditContact(contact)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Contact
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleAssignToGroup(contact)}>
+                            <Users2 className="h-4 w-4 mr-2" />
+                            Assign to Group
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteContact(contact.id)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete Contact
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </div>
@@ -421,6 +583,47 @@ export default function Contacts() {
           </div>
         )}
       </div>
+
+      {/* Group Assignment Modal */}
+      <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Contact to Groups</DialogTitle>
+          </DialogHeader>
+          {selectedContactForGroup && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Assigning <strong>{selectedContactForGroup.firstName} {selectedContactForGroup.lastName}</strong> to groups:
+              </p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {groups.map(group => (
+                  <div key={group.id} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`group-${group.id}`}
+                      checked={selectedContactForGroup.groupIds.includes(group.id)}
+                      onChange={() => handleGroupAssignment(group.id)}
+                    />
+                    <label htmlFor={`group-${group.id}`} className="text-sm cursor-pointer">
+                      {group.name}
+                    </label>
+                  </div>
+                ))}
+              </div>
+              {groups.length === 0 && (
+                <p className="text-sm text-gray-500">
+                  No groups available. Create groups first to assign contacts.
+                </p>
+              )}
+              <div className="flex justify-end space-x-4">
+                <Button variant="outline" onClick={() => setShowGroupModal(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

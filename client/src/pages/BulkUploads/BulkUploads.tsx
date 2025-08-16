@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { uploadToStorage } from "@/utils/upload";
 import { callGeminiAPI } from "@/utils/ocr";
@@ -10,6 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { CloudUpload, Check, Clock, X, Save, Users } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface UploadResult {
   id: string;
@@ -20,11 +22,41 @@ interface UploadResult {
   error?: string;
 }
 
+interface Group {
+  id: string;
+  name: string;
+  ownerId: string;
+}
+
 export default function BulkUploads() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchGroups();
+  }, [user]);
+
+  const fetchGroups = async () => {
+    try {
+      const groupsQuery = query(collection(db, "groups"), where("ownerId", "==", user!.uid));
+      const groupsSnapshot = await getDocs(groupsQuery);
+      const groupsData = groupsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Group[];
+      setGroups(groupsData);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
 
   const handleFileSelect = async (files: FileList) => {
     if (files.length > 10) {
@@ -69,8 +101,14 @@ export default function BulkUploads() {
 
       } catch (error: any) {
         console.error("Error processing file:", error);
+        const errorMessage = error.message?.includes('API key') 
+          ? 'API key issue. Please check your Gemini API configuration.'
+          : error.message?.includes('fetch')
+          ? 'Network error. Please check your internet connection.'
+          : error.message || 'Unknown error occurred';
+        
         setUploadResults(prev => prev.map(r => 
-          r.id === result.id ? { ...r, status: "error", error: error.message } : r
+          r.id === result.id ? { ...r, status: "error", error: errorMessage } : r
         ));
       }
     }
@@ -99,7 +137,7 @@ export default function BulkUploads() {
           continue;
         }
 
-        // Create contact
+        // Create contact with selected groups
         await addDoc(collection(db, "contacts"), {
           firstName: data.name?.split(' ')[0] || "",
           lastName: data.name?.split(' ').slice(1).join(' ') || "",
@@ -108,7 +146,7 @@ export default function BulkUploads() {
           company: data.company || "",
           services: data.services || "",
           address: data.address || "",
-          groupIds: [],
+          groupIds: selectedGroupIds,
           ownerId: user!.uid,
           createdAt: serverTimestamp(),
         });
@@ -116,9 +154,18 @@ export default function BulkUploads() {
         savedCount++;
       }
 
+      let successMessage = `Saved ${savedCount} contact${savedCount !== 1 ? 's' : ''}`;
+      if (selectedGroupIds.length > 0) {
+        const groupNames = groups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name).join(', ');
+        successMessage += ` to group${selectedGroupIds.length > 1 ? 's' : ''}: ${groupNames}`;
+      }
+      if (duplicateCount > 0) {
+        successMessage += `, skipped ${duplicateCount} duplicate${duplicateCount !== 1 ? 's' : ''}`;
+      }
+      
       toast({
         title: "Success",
-        description: `Saved ${savedCount} contacts${duplicateCount > 0 ? `, skipped ${duplicateCount} duplicates` : ''}`,
+        description: successMessage,
       });
 
       // Clear results after saving
@@ -296,11 +343,43 @@ export default function BulkUploads() {
                 </div>
 
                 {/* Actions */}
+                {/* Group Assignment Section */}
+                {!loadingGroups && groups.length > 0 && (
+                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-3">Assign to Groups (Optional)</h4>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {groups.map(group => (
+                        <div key={group.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`bulk-group-${group.id}`}
+                            checked={selectedGroupIds.includes(group.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedGroupIds(prev => [...prev, group.id]);
+                              } else {
+                                setSelectedGroupIds(prev => prev.filter(id => id !== group.id));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`bulk-group-${group.id}`} className="text-sm cursor-pointer">
+                            {group.name}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-6 flex items-center justify-between">
                   <div className="text-sm text-gray-500">
                     <span>
                       {uploadResults.filter(r => r.status === "completed").length} of {uploadResults.length} cards processed
                     </span>
+                    {selectedGroupIds.length > 0 && (
+                      <span className="block text-xs text-blue-600">
+                        Will be assigned to {selectedGroupIds.length} group{selectedGroupIds.length !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
                   <div className="flex space-x-3">
                     <Button
