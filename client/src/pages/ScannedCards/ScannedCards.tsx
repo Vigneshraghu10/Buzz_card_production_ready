@@ -109,9 +109,19 @@ export default function ScannedCards() {
       fetchData();
     } catch (error: any) {
       console.error("Error processing card:", error);
+      let errorMessage = "Failed to process business card";
+      
+      if (error.message?.includes('API key') || error.message?.includes('401')) {
+        errorMessage = 'API key issue. Please check your Gemini API configuration.';
+      } else if (error.message?.includes('Network') || error.message?.includes('fetch')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to process business card",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

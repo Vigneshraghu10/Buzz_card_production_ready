@@ -140,15 +140,17 @@ export default function Contacts() {
         setShowEditModal(false);
         setEditingContact(null);
       } else {
-        // Check for duplicates
-        const isDupe = await isDuplicateContact(user!.uid, formData.email, formData.phone);
-        if (isDupe) {
-          toast({
-            title: "Duplicate Contact",
-            description: "A contact with this email or phone already exists",
-            variant: "destructive",
-          });
-          return;
+        // Check for duplicates only if email or phone is provided
+        if (formData.email || formData.phone) {
+          const isDupe = await isDuplicateContact(user!.uid, formData.email, formData.phone);
+          if (isDupe) {
+            toast({
+              title: "Duplicate Contact",
+              description: "A contact with this email or phone already exists",
+              variant: "destructive",
+            });
+            return;
+          }
         }
 
         await addDoc(collection(db, "contacts"), {

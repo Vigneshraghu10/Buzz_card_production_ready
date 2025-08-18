@@ -102,11 +102,19 @@ export default function BulkUploads() {
 
       } catch (error: any) {
         console.error("Error processing file:", error);
-        const errorMessage = error.message?.includes('API key') 
-          ? 'API key issue. Please check your Gemini API configuration.'
-          : error.message?.includes('fetch')
-          ? 'Network error. Please check your internet connection.'
-          : error.message || 'Unknown error occurred';
+        let errorMessage = 'Unknown error occurred';
+        
+        if (error.message?.includes('API key') || error.message?.includes('401')) {
+          errorMessage = 'API key issue. Please check your Gemini API configuration.';
+        } else if (error.message?.includes('fetch') || error.message?.includes('Network')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else if (error.message?.includes('Failed to fetch image')) {
+          errorMessage = 'Failed to load image. Please try again.';
+        } else if (error.message?.includes('Invalid file type')) {
+          errorMessage = 'Invalid file type. Please upload an image.';
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
         
         setUploadResults(prev => prev.map(r => 
           r.id === result.id ? { ...r, status: "error", error: errorMessage } : r
@@ -131,11 +139,13 @@ export default function BulkUploads() {
       for (const result of completedResults) {
         const data = result.extractedData!;
         
-        // Check for duplicates
-        const isDupe = await isDuplicateContact(user!.uid, data.email, data.phone);
-        if (isDupe) {
-          duplicateCount++;
-          continue;
+        // Check for duplicates only if email or phone is available
+        if (data.email || data.phone) {
+          const isDupe = await isDuplicateContact(user!.uid, data.email, data.phone);
+          if (isDupe) {
+            duplicateCount++;
+            continue;
+          }
         }
 
         // Create contact with selected groups

@@ -6,23 +6,15 @@ export async function callVisionAPI(imageUrl: string): Promise<string> {
   }
 
   try {
-    // Convert image URL to base64
-    const imageResponse = await fetch(imageUrl, {
-      mode: 'cors',
-      credentials: 'same-origin'
-    });
-    
-    if (!imageResponse.ok) {
-      throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
-    }
-    
-    const imageBlob = await imageResponse.blob();
-    const imageBase64 = await blobToBase64(imageBlob);
-    const base64Data = imageBase64.split(',')[1]; // Remove data URL prefix
+    // Convert image URL to base64 with better error handling
+    const { base64Data, mimeType } = await fetchImageAsBase64(imageUrl);
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -31,7 +23,7 @@ export async function callVisionAPI(imageUrl: string): Promise<string> {
             },
             {
               inline_data: {
-                mime_type: "image/jpeg",
+                mime_type: mimeType,
                 data: base64Data
               }
             }
@@ -47,7 +39,13 @@ export async function callVisionAPI(imageUrl: string): Promise<string> {
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: { message: errorText } };
+      }
       throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
     }
 
@@ -70,23 +68,15 @@ export async function callGeminiAPI(imageUrl: string): Promise<import('./parse')
   }
 
   try {
-    // Convert image URL to base64
-    const imageResponse = await fetch(imageUrl, {
-      mode: 'cors',
-      credentials: 'same-origin'
-    });
-    
-    if (!imageResponse.ok) {
-      throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
-    }
-    
-    const imageBlob = await imageResponse.blob();
-    const imageBase64 = await blobToBase64(imageBlob);
-    const base64Data = imageBase64.split(',')[1]; // Remove data URL prefix
+    // Convert image URL to base64 with better error handling
+    const { base64Data, mimeType } = await fetchImageAsBase64(imageUrl);
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
       body: JSON.stringify({
         contents: [{
           parts: [
@@ -106,7 +96,7 @@ Only include fields that you can clearly identify from the image. Use null for f
             },
             {
               inline_data: {
-                mime_type: "image/jpeg",
+                mime_type: mimeType,
                 data: base64Data
               }
             }
@@ -122,12 +112,22 @@ Only include fields that you can clearly identify from the image. Use null for f
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: { message: errorText } };
+      }
       throw new Error(`Gemini API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
     }
 
     const data = await response.json();
     const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    
+    if (!responseText) {
+      throw new Error('No response from Gemini API');
+    }
     
     // Try to parse JSON response
     try {
@@ -156,6 +156,49 @@ Only include fields that you can clearly identify from the image. Use null for f
     console.error("Gemini OCR Error:", error);
     throw error;
   }
+}
+
+// Helper function to fetch image and convert to base64
+async function fetchImageAsBase64(imageUrl: string): Promise<{ base64Data: string; mimeType: string }> {
+  let imageResponse;
+  try {
+    imageResponse = await fetch(imageUrl, {
+      mode: 'cors',
+      headers: {
+        'Accept': 'image/*'
+      }
+    });
+  } catch (fetchError: any) {
+    console.error("Fetch error:", fetchError);
+    throw new Error(`Network error when fetching image: ${fetchError.message}`);
+  }
+  
+  if (!imageResponse.ok) {
+    throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+  }
+  
+  const imageBlob = await imageResponse.blob();
+  
+  // Validate blob size and type
+  if (imageBlob.size === 0) {
+    throw new Error('Image file is empty');
+  }
+  
+  if (!imageBlob.type.startsWith('image/')) {
+    throw new Error(`Invalid file type: ${imageBlob.type}. Expected an image.`);
+  }
+  
+  const imageBase64 = await blobToBase64(imageBlob);
+  const base64Data = imageBase64.split(',')[1]; // Remove data URL prefix
+  
+  if (!base64Data) {
+    throw new Error('Failed to convert image to base64');
+  }
+
+  return {
+    base64Data,
+    mimeType: imageBlob.type || 'image/jpeg'
+  };
 }
 
 // Helper function to convert blob to base64

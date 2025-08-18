@@ -54,22 +54,29 @@ export default function Dashboard() {
           scannedCardsCount: counts[3],
         });
 
-        // Fetch recent activities (scanned cards)
-        const recentQuery = query(
-          collection(db, "scannedCards"),
-          where("ownerId", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(5)
-        );
-        const recentSnapshot = await getDocs(recentQuery);
-        const activities = recentSnapshot.docs.map(doc => ({
-          id: doc.id,
-          type: "scan",
-          description: `Scanned business card`,
-          timestamp: doc.data().createdAt?.toDate() || new Date(),
-        }));
-        
-        setRecentActivities(activities);
+        // Fetch recent activities (scanned cards) - simplified to avoid composite index requirement
+        try {
+          const recentQuery = query(
+            collection(db, "scannedCards"),
+            where("ownerId", "==", user.uid),
+            limit(5)
+          );
+          const recentSnapshot = await getDocs(recentQuery);
+          const activities = recentSnapshot.docs
+            .map(doc => ({
+              id: doc.id,
+              type: "scan",
+              description: `Scanned business card`,
+              timestamp: doc.data().createdAt?.toDate() || new Date(),
+            }))
+            .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+            .slice(0, 5);
+          
+          setRecentActivities(activities);
+        } catch (activityError) {
+          console.log("Could not fetch recent activities:", activityError);
+          setRecentActivities([]);
+        }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
