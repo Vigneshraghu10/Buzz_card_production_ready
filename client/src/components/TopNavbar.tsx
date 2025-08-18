@@ -1,18 +1,14 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Bell, Search, Menu, ChevronDown, Zap, Activity } from "lucide-react";
+import { Search, Menu, ChevronDown, Zap, Activity } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function TopNavbar() {
   const { user } = useAuth();
 
   return (
-    <div className="relative z-10 flex-shrink-0 flex h-16 bg-white/80 backdrop-blur-md shadow-lg border-b border-gray-200/50">
-      {/* Mobile menu button */}
-      <Button variant="ghost" className="px-4 border-r border-gray-200/50 text-gray-500 lg:hidden hover:bg-gray-100">
-        <Menu className="h-5 w-5" />
-      </Button>
+    <div className="relative z-10 flex-shrink-0 flex h-16 bg-white/80 backdrop-blur-md shadow-lg border-b border-gray-200/50 lg:ml-0 ml-0">
       
       <div className="flex-1 px-6 flex justify-between">
         <div className="flex-1 flex items-center">
@@ -49,15 +45,7 @@ export default function TopNavbar() {
             </div>
           </div>
 
-          {/* Notifications */}
-          <div className="relative">
-            <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900 hover:bg-gray-100 relative">
-              <Bell className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center bg-red-500 text-white text-xs">
-                3
-              </Badge>
-            </Button>
-          </div>
+
 
           {/* Profile dropdown */}
           <div className="relative">

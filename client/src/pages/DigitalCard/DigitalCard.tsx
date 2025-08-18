@@ -450,10 +450,6 @@ export default function DigitalCard() {
                       <QrCode className="h-4 w-4 mr-2" />
                       Download QR
                     </Button>
-                    <Button variant="outline" onClick={handleCopyShareLink}>
-                      <LinkIcon className="h-4 w-4 mr-2" />
-                      Copy Share Link
-                    </Button>
                   </div>
                 </div>
               </CardContent>

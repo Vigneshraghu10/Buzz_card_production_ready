@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,8 @@ import {
   Smartphone, 
   LogOut,
   Zap,
-  Sparkles 
+  Sparkles,
+  Menu 
 } from "lucide-react";
 
 const navigation = [
@@ -72,116 +74,127 @@ const navigation = [
 export default function Sidebar() {
   const [location] = useLocation();
   const { logout, user } = useAuth();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   return (
-    <div className="hidden lg:flex lg:flex-shrink-0">
-      <div className="flex flex-col w-72">
-        <div className="flex flex-col flex-grow bg-gradient-to-b from-slate-900 to-slate-800 pt-5 pb-4 overflow-y-auto shadow-2xl">
-          {/* Logo */}
-          <div className="flex items-center flex-shrink-0 px-6">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <Zap className="text-white h-5 w-5" />
-              </div>
-              <div className="ml-3">
-                <h1 className="text-xl font-bold text-white">CardManager</h1>
-                <p className="text-xs text-slate-300">AI-Powered Business Cards</p>
-              </div>
-            </div>
-          </div>
-          
-          {/* User Profile */}
-          <div className="mt-6 px-6">
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+    <>
+      {/* Mobile menu button */}
+      <div className="lg:hidden fixed top-4 left-4 z-50">
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => setIsMobileOpen(!isMobileOpen)}
+          className="bg-white/90 backdrop-blur-sm shadow-lg border-gray-200"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* Mobile overlay */}
+      {isMobileOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`
+        fixed lg:static inset-y-0 left-0 z-50 
+        lg:flex lg:flex-shrink-0 
+        transform transition-transform duration-200 ease-in-out
+        ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="flex flex-col w-72">
+          <div className="flex flex-col flex-grow bg-white pt-5 pb-4 overflow-y-auto shadow-2xl border-r border-gray-200">
+            {/* Logo */}
+            <div className="flex items-center flex-shrink-0 px-6">
               <div className="flex items-center">
-                <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-lg flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">
-                    {user?.email?.charAt(0)?.toUpperCase() || 'U'}
-                  </span>
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <Zap className="text-white h-5 w-5" />
                 </div>
-                <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium text-white truncate">
-                    {user?.displayName || 'User'}
-                  </p>
-                  <p className="text-xs text-slate-300 truncate">
-                    {user?.email}
-                  </p>
+                <div className="ml-3">
+                  <h1 className="text-xl font-bold text-gray-900">CardManager</h1>
+                  <p className="text-xs text-gray-500">AI-Powered Business Cards</p>
                 </div>
               </div>
             </div>
-          </div>
-          
-          {/* Navigation */}
-          <nav className="mt-8 flex-1 px-4 space-y-2">
-            {navigation.map((item) => {
-              const isActive = location === item.href;
-              return (
-                <Link key={item.name} href={item.href}>
-                  <div className={`
-                    group flex items-center px-4 py-3 text-sm font-medium rounded-xl cursor-pointer transition-all duration-200
-                    ${isActive 
-                      ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105' 
-                      : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
-                    }
-                  `}>
-                    <item.icon className={`
-                      mr-3 h-5 w-5 transition-all duration-200
-                      ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}
-                    `} />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span>{item.name}</span>
-                        {item.isNew && (
-                          <Badge className="ml-2 bg-green-500 text-white text-xs px-2 py-0.5">
-                            NEW
-                          </Badge>
-                        )}
+            
+            {/* Navigation */}
+            <nav className="mt-8 flex-1 px-4 space-y-2">
+              {navigation.map((item) => {
+                const isActive = location === item.href;
+                return (
+                  <Link key={item.name} href={item.href}>
+                    <div 
+                      className={`
+                        group flex items-center px-4 py-3 text-sm font-medium rounded-xl cursor-pointer transition-all duration-200
+                        ${isActive 
+                          ? 'bg-gray-100 text-blue-600' 
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                        }
+                      `}
+                      onClick={() => setIsMobileOpen(false)}
+                    >
+                      <item.icon className={`
+                        mr-3 h-5 w-5 transition-all duration-200
+                        ${isActive ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}
+                      `} />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span>{item.name}</span>
+                          {item.isNew && (
+                            <Badge className="ml-2 bg-green-500 text-white text-xs px-2 py-0.5">
+                              NEW
+                            </Badge>
+                          )}
+                        </div>
+                        <p className={`text-xs mt-0.5 ${
+                          isActive ? 'text-blue-500' : 'text-gray-400'
+                        }`}>
+                          {item.description}
+                        </p>
                       </div>
-                      <p className={`text-xs mt-0.5 ${
-                        isActive ? 'text-blue-100' : 'text-slate-400'
-                      }`}>
-                        {item.description}
-                      </p>
                     </div>
+                  </Link>
+                );
+              })}
+              
+              {/* Divider */}
+              <div className="border-t border-gray-200 my-6"></div>
+              
+              {/* NFC Card - Coming Soon */}
+              <div className="group flex items-center px-4 py-3 text-sm font-medium rounded-xl text-gray-400 cursor-not-allowed">
+                <Smartphone className="text-gray-400 mr-3 h-5 w-5" />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span>NFC Card</span>
+                    <Badge className="ml-2 bg-amber-500 text-white text-xs px-2 py-0.5">
+                      SOON
+                    </Badge>
                   </div>
-                </Link>
-              );
-            })}
-            
-            {/* Divider */}
-            <div className="border-t border-slate-700 my-6"></div>
-            
-            {/* NFC Card - Coming Soon */}
-            <div className="group flex items-center px-4 py-3 text-sm font-medium rounded-xl text-slate-400 cursor-not-allowed">
-              <Smartphone className="text-slate-500 mr-3 h-5 w-5" />
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span>NFC Card</span>
-                  <Badge className="ml-2 bg-amber-500 text-white text-xs px-2 py-0.5">
-                    SOON
-                  </Badge>
+                  <p className="text-xs mt-0.5 text-gray-400">
+                    Tap to share contacts
+                  </p>
                 </div>
-                <p className="text-xs mt-0.5 text-slate-500">
-                  Tap to share contacts
-                </p>
               </div>
-            </div>
-            
-            {/* Logout */}
-            <Button
-              variant="ghost"
-              onClick={logout}
-              className="w-full justify-start text-red-400 hover:bg-red-900/20 hover:text-red-300 mt-6 rounded-xl px-4 py-3"
-            >
-              <LogOut className="text-red-400 mr-3 h-5 w-5" />
-              <div className="text-left">
-                <div>Logout</div>
-                <div className="text-xs text-red-400/70">Sign out safely</div>
-              </div>
-            </Button>
-          </nav>
+              
+              {/* Logout */}
+              <Button
+                variant="ghost"
+                onClick={logout}
+                className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700 mt-6 rounded-xl px-4 py-3"
+              >
+                <LogOut className="text-red-600 mr-3 h-5 w-5" />
+                <div className="text-left">
+                  <div>Logout</div>
+                  <div className="text-xs text-red-500">Sign out safely</div>
+                </div>
+              </Button>
+            </nav>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

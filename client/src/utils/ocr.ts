@@ -7,7 +7,15 @@ export async function callVisionAPI(imageUrl: string): Promise<string> {
 
   try {
     // Convert image URL to base64
-    const imageResponse = await fetch(imageUrl);
+    const imageResponse = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'same-origin'
+    });
+    
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+    }
+    
     const imageBlob = await imageResponse.blob();
     const imageBase64 = await blobToBase64(imageBlob);
     const base64Data = imageBase64.split(',')[1]; // Remove data URL prefix
@@ -63,7 +71,15 @@ export async function callGeminiAPI(imageUrl: string): Promise<import('./parse')
 
   try {
     // Convert image URL to base64
-    const imageResponse = await fetch(imageUrl);
+    const imageResponse = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'same-origin'
+    });
+    
+    if (!imageResponse.ok) {
+      throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+    }
+    
     const imageBlob = await imageResponse.blob();
     const imageBase64 = await blobToBase64(imageBlob);
     const base64Data = imageBase64.split(',')[1]; // Remove data URL prefix

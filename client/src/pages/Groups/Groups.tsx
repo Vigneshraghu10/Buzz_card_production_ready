@@ -6,9 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, Trash2 } from "lucide-react";
+import { Plus, Users, Trash2, Tag, X } from "lucide-react";
 
 interface Group {
   id: string;
@@ -16,6 +17,7 @@ interface Group {
   createdAt: Date;
   ownerId: string;
   contactCount?: number;
+  tags?: string[];
 }
 
 export default function Groups() {
@@ -23,8 +25,11 @@ export default function Groups() {
   const { toast } = useToast();
   const [groups, setGroups] = useState<Group[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showTagsModal, setShowTagsModal] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
   const [groupName, setGroupName] = useState("");
+  const [newTag, setNewTag] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -76,6 +81,7 @@ export default function Groups() {
         name: groupName,
         ownerId: user!.uid,
         createdAt: serverTimestamp(),
+        tags: [],
       });
 
       toast({
@@ -94,6 +100,71 @@ export default function Groups() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleAddTag = async () => {
+    if (!newTag.trim() || !selectedGroup) return;
+
+    try {
+      const currentTags = selectedGroup.tags || [];
+      if (currentTags.includes(newTag.trim())) {
+        toast({
+          title: "Tag already exists",
+          description: "This tag is already added to the group",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const updatedTags = [...currentTags, newTag.trim()];
+      await updateDoc(doc(db, "groups", selectedGroup.id), { tags: updatedTags });
+
+      setSelectedGroup({ ...selectedGroup, tags: updatedTags });
+      setNewTag("");
+      fetchGroups();
+
+      toast({
+        title: "Success",
+        description: "Tag added successfully",
+      });
+    } catch (error) {
+      console.error("Error adding tag:", error);
+      toast({
+        title: "Error",
+        description: "Failed to add tag",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveTag = async (tagToRemove: string) => {
+    if (!selectedGroup) return;
+
+    try {
+      const currentTags = selectedGroup.tags || [];
+      const updatedTags = currentTags.filter(tag => tag !== tagToRemove);
+      await updateDoc(doc(db, "groups", selectedGroup.id), { tags: updatedTags });
+
+      setSelectedGroup({ ...selectedGroup, tags: updatedTags });
+      fetchGroups();
+
+      toast({
+        title: "Success",
+        description: "Tag removed successfully",
+      });
+    } catch (error) {
+      console.error("Error removing tag:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove tag",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openTagsModal = (group: Group) => {
+    setSelectedGroup(group);
+    setShowTagsModal(true);
   };
 
   const handleDeleteGroup = async (groupId: string) => {
@@ -196,7 +267,7 @@ export default function Groups() {
           {groups.map((group) => (
             <Card key={group.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-6">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -219,15 +290,90 @@ export default function Groups() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="mt-4">
+
+                {/* Tags */}
+                {group.tags && group.tags.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex flex-wrap gap-2">
+                      {group.tags.map((tag, index) => (
+                        <Badge key={index} variant="secondary" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500">
                     Created {group.createdAt.toLocaleDateString()}
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openTagsModal(group)}
+                    className="text-blue-600 hover:text-blue-700"
+                  >
+                    <Tag className="h-4 w-4 mr-1" />
+                    Tags
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        {/* Tags Management Modal */}
+        <Dialog open={showTagsModal} onOpenChange={setShowTagsModal}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Manage Tags - {selectedGroup?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Add New Tag */}
+              <div className="flex space-x-2">
+                <Input
+                  placeholder="Enter tag name..."
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                />
+                <Button onClick={handleAddTag} disabled={!newTag.trim()}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Current Tags */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">Current Tags</Label>
+                {selectedGroup?.tags && selectedGroup.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedGroup.tags.map((tag, index) => (
+                      <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                        {tag}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 hover:bg-red-100"
+                          onClick={() => handleRemoveTag(tag)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No tags added yet</p>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {groups.length === 0 && (
           <div className="mt-6 text-center py-12">
