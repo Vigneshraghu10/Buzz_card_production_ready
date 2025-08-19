@@ -5,6 +5,7 @@ This is a comprehensive WhatsApp Business Digital Visiting Card Manager built wi
 # User Preferences
 
 Preferred communication style: Simple, everyday language.
+Platform: Windows 11 with VS Code IDE for local development.
 
 # System Architecture
 
