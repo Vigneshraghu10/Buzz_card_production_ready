@@ -1,0 +1,112 @@
+PS C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan> npm run dev
+>>
+
+> rest-express@1.0.0 dev
+> concurrently "npm run dev:server" "npm run dev:client"
+
+[1] 
+[1] > rest-express@1.0.0 dev:client
+[1] > cd client && vite
+[1]
+[0]
+[0] > rest-express@1.0.0 dev:server
+[0] > cd server && cross-env NODE_ENV=development tsx index.ts
+[0]
+[1] Port 5173 is in use, trying another one...
+[1] Port 5174 is in use, trying another one...
+[1]
+[1]   VITE v5.4.19  ready in 290 ms
+[1]
+[1]   ➜  Local:   http://localhost:5175/
+[1]   ➜  Network: use --host to expose
+[0] node:events:496
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use ::1:5000
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1939:16)
+[0]     at listenInCluster (node:net:1996:12)
+[0]     at GetAddrInfoReqWrap.callback (node:net:2205:7)
+[0]     at GetAddrInfoReqWrap.onlookupall [as oncomplete] (node:dns:134:8)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1975:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::1',
+[0]   port: 5000
+[0] }
+[0]
+[0] Node.js v22.16.0
+[0] npm run dev:server exited with code 1
+[1] Error: The following dependencies are imported but could not be resolved:
+[1]
+[1]   @/components/ui/toaster (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/components/ui/tooltip (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/contexts/AuthContext (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/routes/PrivateRoute (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/components/Layout (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Auth/Login (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Auth/Register (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Dashboard/Dashboard (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Contacts/Contacts (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Groups/Groups (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Templates/Templates (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/BulkUploads/BulkUploads (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/ScannedCards/ScannedCards (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/DigitalCard/DigitalCard (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/Settings/Settings (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/NFCCard/NFCCard (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/PublicShare/PublicShare (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]   @/pages/not-found (imported by C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx)
+[1]
+[1] Are they installed?
+[1]     at file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:50669:15
+[1]     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[1]     at async file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:50174:26
+[1] 4:40:04 pm [vite] Pre-transform error: Failed to resolve import "@/components/ui/toaster" from "src/App.tsx". Does the file exist?
+[1] Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+[1]   npx update-browserslist-db@latest
+[1]   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[1] 
+[1] warn - The `content` option in your Tailwind CSS configuration is missing or empty.
+[1] warn - Configure your content sources or your generated CSS will be missing styles.
+[1] warn - https://tailwindcss.com/docs/content-configuration
+[1] 4:40:04 pm [vite] Internal server error: [postcss] C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/index.css:1:1: The `border-border` class does not exist. If `border-border` is a custom class, make sure it is defined within a `@layer` directive.
+[1]   Plugin: vite:css
+[1]   File: C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/index.css:1:0
+[1]   1  |  @tailwind base;
+[1]      |  ^
+[1]   2  |  @tailwind components;
+[1]   3  |  @tailwind utilities;
+[1]       at Input.error (C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\postcss\lib\input.js:106:16)
+[1]       at AtRule.error (C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\postcss\lib\node.js:115:32)
+[1]       at processApply (C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\tailwindcss\lib\lib\expandApplyAtRules.js:380:29)
+[1]       at C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\tailwindcss\lib\lib\expandApplyAtRules.js:551:9
+[1]       at C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\tailwindcss\lib\processTailwindFeatures.js:55:50
+[1]       at async plugins (C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\tailwindcss\lib\plugin.js:38:17)
+[1]       at async LazyResult.runAsync (C:\Users\ADMIN\OneDrive\Desktop\New folder (4)\BizCardScan\node_modules\postcss\lib\lazy-result.js:261:11)
+[1]       at async compileCSS (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:36898:21) 
+[1]       at async TransformPluginContext.transform (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:36171:11)
+[1]       at async PluginContainer.transform (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49099:18)
+[1] 4:40:04 pm [vite] Pre-transform error: [postcss] C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/index.css:1:1: The `border-border` class does not exist. If `border-border` is a custom class, make sure it is defined within a `@layer` directive.
+[1] 4:40:04 pm [vite] Internal server error: Failed to resolve import "@/components/ui/toaster" from "src/App.tsx". Does the file exist?
+[1]   Plugin: vite:import-analysis
+[1]   File: C:/Users/ADMIN/OneDrive/Desktop/New folder (4)/BizCardScan/client/src/App.tsx:4:24
+[1]   2  |  import { QueryClientProvider } from "@tanstack/react-query";
+[1]   3  |  import { queryClient } from "./lib/queryClient";
+[1]   4  |  import { Toaster } from "@/components/ui/toaster";
+[1]      |                           ^
+[1]   5  |  import { TooltipProvider } from "@/components/ui/tooltip";
+[1]   6  |  import { AuthProvider } from "@/contexts/AuthContext";
+[1]       at TransformPluginContext._formatError (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49258:41)
+[1]       at TransformPluginContext.error (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49253:16)
+[1]       at normalizeUrl (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:64291:23)     
+[1]       at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[1]       at async file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:64423:39
+[1]       at async Promise.all (index 3)
+[1]       at async TransformPluginContext.transform (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:64350:7)
+[1]       at async PluginContainer.transform (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:49099:18)
+[1]       at async loadAndTransform (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:51977:27)
+[1]       at async viteTransformMiddleware (file:///C:/Users/ADMIN/OneDrive/Desktop/New%20folder%20(4)/BizCardScan/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:62105:24)
