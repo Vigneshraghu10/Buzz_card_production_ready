@@ -1,8 +1,29 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; // 👈 Make sure you have this
 import { Smartphone, Zap, Share2, Clock } from "lucide-react";
 
 export default function NFCCard() {
+  const [email, setEmail] = useState("");
+  const [waitlistCount, setWaitlistCount] = useState(42); // 👈 demo count
+  const [interestedCount, setInterestedCount] = useState(100); // 👈 demo count
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const handleJoinWaitlist = () => {
+    if (!email) return;
+    // TODO: send email to backend / API
+    console.log("New Waitlist Email:", email);
+    setWaitlistCount(waitlistCount + 1);
+    setIsSubmitted(true);
+    setEmail("");
+  };
+
+  const handleInterested = () => {
+    // TODO: save interested click to backend
+    setInterestedCount(interestedCount + 1);
+  };
+
   return (
     <div className="py-6">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8">
@@ -72,14 +93,37 @@ export default function NFCCard() {
                 Get notified when NFC digital cards become available. Join our waitlist to secure early access 
                 and special launch pricing.
               </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <Button size="lg" disabled className="cursor-not-allowed opacity-60">
-                  Join Waitlist
-                </Button>
-                <Button variant="outline" size="lg" disabled className="cursor-not-allowed opacity-60">
-                  Learn More
+
+              {/* Email Input Form */}
+              {!isSubmitted ? (
+                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-6">
+                  <Input 
+                    type="email" 
+                    placeholder="Enter your email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="max-w-sm"
+                  />
+                  <Button size="lg" onClick={handleJoinWaitlist}>
+                    Join Waitlist
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-green-600 font-medium mb-6">✅ You’re on the waitlist!</p>
+              )}
+
+              {/* Waitlist Counter */}
+              <p className="text-sm text-gray-500 mb-4">
+                {waitlistCount}+ people have already joined
+              </p>
+
+              {/* Interested Button */}
+              <div className="flex justify-center">
+                <Button variant="outline" onClick={handleInterested}>
+                  I’m Interested ({interestedCount})
                 </Button>
               </div>
+
               <p className="text-sm text-gray-500 mt-4">
                 Expected launch: Q2 2024
               </p>

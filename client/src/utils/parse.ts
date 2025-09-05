@@ -1,12 +1,44 @@
 export type ParsedContact = {
   name?: string;
   company?: string;
-  phone?: string;
+  phones?: string[];
   email?: string;
   services?: string;
   address?: string;
   qr?: string;
 };
+
+function extractPhoneNumbers(text: string): string[] {
+  // A more comprehensive regex for phone numbers
+  const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{2,5}\)?[-.\s]?)?\d{2,5}[-.\s]?\d{2,5}[-.\s]?\d{2,5}/g;
+  
+  // Normalize text to improve matching
+  const normalizedText = text.replace(/o/gi, '0').replace(/[l]/gi, '1');
+  
+  const matches = normalizedText.match(phoneRegex);
+
+  if (!matches) {
+    return [];
+  }
+
+  const uniquePhones = new Set<string>();
+  matches.forEach(match => {
+    // Clean the number by removing all non-digit characters, except for a potential leading '+'
+    let cleaned = match.replace(/[^\d+]/g, '');
+    
+    // Remove leading '0' if a country code is likely present
+    if (cleaned.startsWith('0') && cleaned.length > 10) {
+      cleaned = cleaned.substring(1);
+    }
+    
+    // Basic validation for length
+    if (cleaned.length >= 10 && cleaned.length <= 15) {
+      uniquePhones.add(cleaned);
+    }
+  });
+
+  return Array.from(uniquePhones);
+}
 
 export function parseOcrToContact(text: string): ParsedContact {
   // Enhanced parsing that works well with Gemini's structured output
@@ -15,22 +47,8 @@ export function parseOcrToContact(text: string): ParsedContact {
   // Extract email with improved regex
   const emailMatch = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/i);
   
-  // Extract phone with multiple format support
-  const phonePatterns = [
-    /\+?[1-9]\d{1,14}/, // International format
-    /\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/, // US format
-    /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/, // US format without area code parens
-    /\d{10,}/ // Simple long number
-  ];
-  
-  let phoneMatch = null;
-  for (const pattern of phonePatterns) {
-    const match = text.replace(/[^\d+\s().-]/g, ' ').match(pattern);
-    if (match) {
-      phoneMatch = match[0].replace(/[^\d+]/g, '');
-      if (phoneMatch.length >= 10) break;
-    }
-  }
+  // Use the new robust phone number extraction
+  const phoneMatches = extractPhoneNumbers(text);
   
   // Extract name - look for capitalized words that appear early and aren't email/phone/company indicators
   const namePatterns = [
@@ -100,7 +118,7 @@ export function parseOcrToContact(text: string): ParsedContact {
   return {
     name: name || undefined,
     company: company || undefined,
-    phone: phoneMatch || undefined,
+    phones: phoneMatches.length > 0 ? phoneMatches : undefined,
     email: emailMatch?.[0] || undefined,
     services: services || undefined,
     address: address || undefined

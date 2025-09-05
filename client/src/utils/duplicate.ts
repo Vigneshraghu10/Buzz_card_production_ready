@@ -1,12 +1,12 @@
 import { collection, getDocs, query, where, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-export async function isDuplicateContact(ownerId: string, email?: string, phone?: string) {
+export async function isDuplicateContact(ownerId: string, email?: string, phones?: string[]) {
   try {
     const col = collection(db, "contacts");
     
     // If no email or phone provided, not a duplicate
-    if (!email && !phone) return false;
+    if (!email && (!phones || phones.length === 0)) return false;
     
     // Check for email match first
     if (email && email.trim()) {
@@ -21,15 +21,19 @@ export async function isDuplicateContact(ownerId: string, email?: string, phone?
     }
     
     // Check for phone match if email didn't match
-    if (phone && phone.trim()) {
-      const phoneQuery = query(
-        col, 
-        where("ownerId", "==", ownerId), 
-        where("phone", "==", phone.trim()),
-        limit(1)
-      );
-      const phoneSnap = await getDocs(phoneQuery);
-      if (!phoneSnap.empty) return true;
+    if (phones && phones.length > 0) {
+      for (const phone of phones) {
+        if (phone && phone.trim()) {
+          const phoneQuery = query(
+            col,
+            where("ownerId", "==", ownerId),
+            where("phones", "array-contains", phone.trim()),
+            limit(1)
+          );
+          const phoneSnap = await getDocs(phoneQuery);
+          if (!phoneSnap.empty) return true;
+        }
+      }
     }
     
     return false;

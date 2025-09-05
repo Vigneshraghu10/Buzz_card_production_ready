@@ -8,8 +8,8 @@ import {
   Users, 
   Layers, 
   FileText, 
-  CloudUpload, 
-  Camera, 
+  Camera,
+  DollarSign, 
   CreditCard, 
   Settings, 
   Smartphone, 
@@ -51,17 +51,30 @@ const navigation = [
     description: "Bulk AI extraction",
     isNew: true
   },
-  { 
-    name: "Single Scan", 
-    href: "/scanned-cards", 
-    icon: Camera, 
-    description: "Individual card scan"
-  },
+  // { 
+  //   name: "Pricing", 
+  //   href: "/scanned-cards", 
+  //   icon: DollarSign, 
+  //   description: "View and manage subscription plans"
+  // },
   { 
     name: "Digital Card", 
     href: "/digital-card", 
     icon: CreditCard, 
     description: "Your digital profile"
+  },
+  { 
+    name: "NFC Card", 
+    href: "/nfc-card",  // 👈 make sure you have this route
+    icon: Smartphone, 
+    description: "Tap to share contacts",
+    isComingSoon: true   // optional flag to show badge
+  },
+  { 
+    name: "Pricing", 
+    href: "/scanned-cards", 
+    icon: DollarSign, 
+    description: "View and manage subscription plans"
   },
   { 
     name: "Settings", 
@@ -73,7 +86,7 @@ const navigation = [
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { logout, user } = useAuth();
+  const { logout } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   return (
@@ -114,7 +127,7 @@ export default function Sidebar() {
                   <Zap className="text-white h-5 w-5" />
                 </div>
                 <div className="ml-3">
-                  <h1 className="text-xl font-bold text-gray-900">CardManager</h1>
+                  <h1 className="text-xl font-bold text-gray-900">Smarticard</h1>
                   <p className="text-xs text-gray-500">AI-Powered Business Cards</p>
                 </div>
               </div>
@@ -148,6 +161,11 @@ export default function Sidebar() {
                               NEW
                             </Badge>
                           )}
+                          {item.isComingSoon && (
+                            <Badge className="ml-2 bg-amber-500 text-white text-xs px-2 py-0.5">
+                              SOON
+                            </Badge>
+                          )}
                         </div>
                         <p className={`text-xs mt-0.5 ${
                           isActive ? 'text-blue-500' : 'text-gray-400'
@@ -162,22 +180,6 @@ export default function Sidebar() {
               
               {/* Divider */}
               <div className="border-t border-gray-200 my-6"></div>
-              
-              {/* NFC Card - Coming Soon */}
-              <div className="group flex items-center px-4 py-3 text-sm font-medium rounded-xl text-gray-400 cursor-not-allowed">
-                <Smartphone className="text-gray-400 mr-3 h-5 w-5" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span>NFC Card</span>
-                    <Badge className="ml-2 bg-amber-500 text-white text-xs px-2 py-0.5">
-                      SOON
-                    </Badge>
-                  </div>
-                  <p className="text-xs mt-0.5 text-gray-400">
-                    Tap to share contacts
-                  </p>
-                </div>
-              </div>
               
               {/* Logout */}
               <Button
