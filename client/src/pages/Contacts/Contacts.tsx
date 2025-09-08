@@ -3,6 +3,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { isDuplicateContact } from "../../utils/duplicate";
+import { useUsageLimits } from "../../hooks/useUsageLimits";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -12,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 import { Badge } from "../../components/ui/badge";
 import { useToast } from "../../hooks/use-toast";
-import { Plus, Search, Grid3X3, List, MoreVertical, Edit, Trash2, Users2, Loader2, Download, Check, FileText, Copy, Upload, FileDown, Phone } from "lucide-react";
+import UsageLimitModal from "../../components/UsageLimitModal";
+import { Plus, Search, Grid3X3, List, MoreVertical, Edit, Trash2, Users2, Loader2, Download, Check, FileText, Copy, Upload, FileDown, Phone, Mail, MapPin, Building, User } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "../../components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import * as XLSX from 'xlsx';
@@ -55,6 +57,7 @@ interface Template {
 function Contacts() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { usage, limits, canAddContact, refreshUsage } = useUsageLimits();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -72,6 +75,7 @@ function Contacts() {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [selectedContactForGroup, setSelectedContactForGroup] = useState<Contact | null>(null);
   const [selectedContactForMessage, setSelectedContactForMessage] = useState<Contact | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
@@ -490,6 +494,13 @@ function Contacts() {
         setShowEditModal(false);
         setEditingContact(null);
       } else {
+        // Check usage limits for new contacts
+        if (!canAddContact) {
+          setShowLimitModal(true);
+          setSaving(false);
+          return;
+        }
+
         if (formData.email || formData.phones.length > 0) {
           try {
             const isDupe = await isDuplicateContact(user.uid, formData.email, formData.phones);
@@ -527,6 +538,9 @@ function Contacts() {
           title: "Success",
           description: "Contact added successfully",
         });
+        
+        // Refresh usage after adding contact
+        await refreshUsage();
         
         setShowAddModal(false);
       }
@@ -895,13 +909,31 @@ const handleSendWhatsAppMessage = () => {
                     {getInitials(contact.firstName, contact.lastName)}
                   </span>
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 space-y-1">
                   <h3 className="text-lg font-medium text-gray-900 truncate">
                     {contact.firstName} {contact.lastName}
                   </h3>
-                  <p className="text-sm text-gray-500 truncate">{contact.company}</p>
-                  {contact.phones?.map((p, i) => <p key={i} className="text-sm text-gray-500">{p}</p>)}
-                  <p className="text-sm text-gray-500 truncate">{contact.email}</p>
+                  {contact.company && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Building className="h-3 w-3 mr-1 flex-shrink-0" />
+                      <span className="truncate">{contact.company}</span>
+                    </div>
+                  )}
+                  {contact.phones && contact.phones.length > 0 && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
+                      <span className="truncate">{contact.phones[0]}</span>
+                      {contact.phones.length > 1 && (
+                        <span className="ml-1 text-xs bg-gray-200 px-1 rounded">+{contact.phones.length - 1}</span>
+                      )}
+                    </div>
+                  )}
+                  {contact.email && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
+                      <span className="truncate">{contact.email}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -938,8 +970,19 @@ const handleSendWhatsAppMessage = () => {
               </div>
             </div>
             {contact.services && (
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 line-clamp-2">{contact.services}</p>
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <User className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-gray-700 line-clamp-2">{contact.services}</p>
+                </div>
+              </div>
+            )}
+            {contact.address && (
+              <div className="mt-3">
+                <div className="flex items-start space-x-2">
+                  <MapPin className="h-3 w-3 text-red-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-gray-600 line-clamp-2">{contact.address}</p>
+                </div>
               </div>
             )}
             <div className="mt-4 flex justify-between items-center">
@@ -1141,16 +1184,24 @@ const handleSendWhatsAppMessage = () => {
               )}
             </Button>
 
+            <Button onClick={() => {
+              if (!canAddContact) {
+                setShowLimitModal(true);
+                return;
+              }
+              handleOpenAddModal();
+            }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Contact
+            </Button>
+            
             <Dialog open={showAddModal || showEditModal} onOpenChange={(open) => {
               if (!open) {
                 handleCloseModal();
               }
             }}>
               <DialogTrigger asChild>
-                <Button onClick={handleOpenAddModal}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Contact
-                </Button>
+                <div style={{ display: 'none' }} />
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -1718,6 +1769,15 @@ You can use placeholders:
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Usage Limit Modal */}
+      <UsageLimitModal
+        isOpen={showLimitModal}
+        onClose={() => setShowLimitModal(false)}
+        feature="contact"
+        currentCount={usage.contactsCount}
+        limit={limits.contacts}
+      />
     </div>
   );
 }
