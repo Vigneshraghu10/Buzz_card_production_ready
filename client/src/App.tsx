@@ -16,8 +16,7 @@ import Dashboard from "@/pages/Dashboard/Dashboard";
 import Contacts from "@/pages/Contacts/Contacts";
 import Groups from "@/pages/Groups/Groups";
 import Templates from "@/pages/Templates/Templates";
-import BulkUploads from "@/pages/BulkUploads/BulkUploads";
-import ScannedCards from "@/pages/ScannedCards/ScannedCards";
+import EnhancedBulkUploads from "@/pages/BulkUploads/EnhancedBulkUploads";
 import DigitalCard from "@/pages/DigitalCard/DigitalCard";
 import Settings from "@/pages/Settings/Settings";
 import NFCCard from "@/pages/NFCCard/NFCCard";
@@ -70,15 +69,7 @@ function Router() {
       <Route path="/bulk-uploads">
         <PrivateRoute>
           <Layout>
-            <BulkUploads />
-          </Layout>
-        </PrivateRoute>
-      </Route>
-
-      <Route path="/scanned-cards">
-        <PrivateRoute>
-          <Layout>
-            <ScannedCards />
+            <EnhancedBulkUploads />
           </Layout>
         </PrivateRoute>
       </Route>

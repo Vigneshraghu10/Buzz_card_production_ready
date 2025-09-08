@@ -1,19 +1,30 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { 
-  collection, query, where, getDocs, orderBy, limit, getCountFromServer 
+  collection, query, where, getDocs, orderBy, limit, getCountFromServer, doc, getDoc 
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye } from "lucide-react";
+import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, Lock } from "lucide-react";
 import { useLocation } from "wouter";
+import PricingSection from "@/components/PricingSection";
 
 interface Stats {
   contactsCount: number;
   groupsCount: number;
   templatesCount: number;
   scannedCardsCount: number;
+}
+
+interface UserSubscription {
+  planId: string;
+  planName: string;
+  status: 'active' | 'expired' | 'cancelled';
+  startDate: any;
+  expiryDate: any;
+  paymentId?: string;
+  orderId?: string;
 }
 
 interface RecentActivity {
@@ -35,12 +46,33 @@ export default function Dashboard() {
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setLocation] = useLocation();
+  const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null);
+  const [showPricing, setShowPricing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
     const fetchStats = async () => {
       try {
+        // Check user subscription status
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const subscription = userData.subscription;
+          setUserSubscription(subscription);
+          
+          // Check if subscription is active
+          const hasActiveSubscription = subscription && 
+            subscription.status === 'active' && 
+            new Date() < new Date(subscription.expiryDate?.toDate?.() || subscription.expiryDate);
+          
+          if (!hasActiveSubscription) {
+            setShowPricing(true);
+          }
+        } else {
+          setShowPricing(true);
+        }
+
         // Fetch counts for all collections
         const collections = ["contacts", "groups", "templates"];
         const counts = await Promise.all(
@@ -132,34 +164,43 @@ export default function Dashboard() {
     { name: "Scanned Cards", count: stats.scannedCardsCount, icon: Camera, color: "from-purple-500 to-purple-600" },
   ];
 
+  // Check if user has active subscription
+  const hasActiveSubscription = userSubscription && 
+    userSubscription.status === 'active' && 
+    new Date() < new Date(userSubscription.expiryDate?.toDate?.() || userSubscription.expiryDate);
+
   const quickActions = [
     { 
       name: "Add Contact", 
-      description: "Create a new contact entry", 
-      icon: UserPlus, 
-      color: "from-blue-50 to-blue-100 text-blue-600 border-blue-200", 
-      action: () => setLocation("/contacts") 
+      description: hasActiveSubscription ? "Create a new contact entry" : "Requires subscription", 
+      icon: hasActiveSubscription ? UserPlus : Lock, 
+      color: hasActiveSubscription ? "from-blue-50 to-blue-100 text-blue-600 border-blue-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
+      action: () => hasActiveSubscription ? setLocation("/contacts") : setShowPricing(true),
+      disabled: !hasActiveSubscription
     },
     { 
       name: "Create Template", 
-      description: "Design a new message template", 
-      icon: FilePlus, 
-      color: "from-yellow-50 to-yellow-100 text-yellow-600 border-yellow-200", 
-      action: () => setLocation("/templates") 
+      description: hasActiveSubscription ? "Design a new message template" : "Requires subscription", 
+      icon: hasActiveSubscription ? FilePlus : Lock, 
+      color: hasActiveSubscription ? "from-yellow-50 to-yellow-100 text-yellow-600 border-yellow-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
+      action: () => hasActiveSubscription ? setLocation("/templates") : setShowPricing(true),
+      disabled: !hasActiveSubscription
     },
     { 
       name: "Bulk Upload", 
-      description: "Upload multiple business cards", 
-      icon: CloudUpload, 
-      color: "from-green-50 to-green-100 text-green-600 border-green-200", 
-      action: () => setLocation("/bulk-uploads") 
+      description: hasActiveSubscription ? "Upload multiple business cards" : "Requires subscription", 
+      icon: hasActiveSubscription ? CloudUpload : Lock, 
+      color: hasActiveSubscription ? "from-green-50 to-green-100 text-green-600 border-green-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
+      action: () => hasActiveSubscription ? setLocation("/bulk-uploads") : setShowPricing(true),
+      disabled: !hasActiveSubscription
     },
     { 
       name: "Scan Card", 
-      description: "Extract contact info from image", 
-      icon: Camera, 
-      color: "from-purple-50 to-purple-100 text-purple-600 border-purple-200", 
-      action: () => setLocation("/scanned-cards") 
+      description: hasActiveSubscription ? "Extract contact info from image" : "Requires subscription", 
+      icon: hasActiveSubscription ? Camera : Lock, 
+      color: hasActiveSubscription ? "from-purple-50 to-purple-100 text-purple-600 border-purple-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
+      action: () => hasActiveSubscription ? setLocation("/bulk-uploads") : setShowPricing(true),
+      disabled: !hasActiveSubscription
     },
   ];
 
@@ -364,8 +405,9 @@ export default function Dashboard() {
             >
               <Button
                 variant="outline"
-                className={`h-auto p-6 flex flex-col items-start space-y-4 transition-all duration-300 border-2 bg-gradient-to-br ${action.color}`}
+                className={`h-auto p-6 flex flex-col items-start space-y-4 transition-all duration-300 border-2 bg-gradient-to-br ${action.color} ${action.disabled ? 'cursor-not-allowed opacity-60' : ''}`}
                 onClick={action.action}
+                disabled={action.disabled}
               >
                 <div className="rounded-2xl inline-flex p-4 shadow-md icon-spin">
                   <action.icon className="h-6 w-6" />
@@ -448,6 +490,13 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      {/* Pricing Section - Show if no active subscription */}
+      {showPricing && (
+        <div className="mt-16">
+          <PricingSection />
+        </div>
+      )}
     </div>
   );
 }
