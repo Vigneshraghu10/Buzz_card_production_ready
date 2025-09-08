@@ -61,6 +61,11 @@ async function extractQRCodes(file: File): Promise<Array<{
               qrInfo.type = 'contact';
               qrInfo.extractedInfo = parseVCard(qrData);
             }
+            // Check if it's a MeCard (contact)
+            else if (qrData.startsWith('MECARD:')) {
+              qrInfo.type = 'contact';
+              qrInfo.extractedInfo = parseMeCard(qrData);
+            }
             // Check if it's a URL
             else if (qrData.match(/^https?:\/\//)) {
               qrInfo.type = 'url';
@@ -99,23 +104,99 @@ async function extractQRCodes(file: File): Promise<Array<{
  * Parse vCard data into structured contact info
  */
 function parseVCard(vCardData: string): any {
-  const lines = vCardData.split('\n');
+  const lines = vCardData.split(/\r?\n/);
   const contact: any = {};
   
   for (const line of lines) {
-    const [key, ...valueParts] = line.split(':');
+    if (!line.trim() || line.startsWith('BEGIN:') || line.startsWith('END:') || line.startsWith('VERSION:')) continue;
+    
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) continue;
+    
+    const key = line.substring(0, colonIndex).trim();
+    const value = line.substring(colonIndex + 1).trim();
+    
+    if (!value) continue;
+    
+    // Parse different vCard fields
+    if (key === 'FN' || key.startsWith('FN;')) {
+      contact.name = value;
+    } else if (key === 'N' || key.startsWith('N;')) {
+      // Parse structured name (Family;Given;Additional;Prefix;Suffix)
+      const nameParts = value.split(';');
+      const lastName = nameParts[0] || '';
+      const firstName = nameParts[1] || '';
+      contact.name = `${firstName} ${lastName}`.trim();
+    } else if (key === 'ORG' || key.startsWith('ORG;')) {
+      contact.company = value;
+    } else if (key === 'EMAIL' || key.startsWith('EMAIL;')) {
+      contact.email = value;
+    } else if (key === 'TEL' || key.startsWith('TEL;')) {
+      if (!contact.phones) contact.phones = [];
+      // Clean phone number
+      const cleanPhone = value.replace(/[^\d+\-\s()]/g, '');
+      if (cleanPhone) contact.phones.push(cleanPhone);
+    } else if (key === 'URL' || key.startsWith('URL;')) {
+      contact.website = value;
+    } else if (key === 'ADR' || key.startsWith('ADR;')) {
+      // Parse structured address (POBox;Extended;Street;City;State;PostalCode;Country)
+      const addressParts = value.split(';').filter(part => part.trim());
+      contact.address = addressParts.join(', ');
+    } else if (key === 'TITLE' || key.startsWith('TITLE;')) {
+      contact.services = value;
+    } else if (key === 'NOTE' || key.startsWith('NOTE;')) {
+      if (!contact.services && value) contact.services = value;
+    }
+  }
+  
+  return contact;
+}
+
+/**
+ * Parse MeCard data into structured contact info
+ */
+function parseMeCard(meCardData: string): any {
+  const contact: any = {};
+  
+  // MeCard format: MECARD:N:lastname,firstname;ORG:company;URL:website;EMAIL:email;TEL:phone;ADR:address;NOTE:note;;
+  const fields = meCardData.replace('MECARD:', '').split(';');
+  
+  for (const field of fields) {
+    if (!field.trim()) continue;
+    
+    const [key, ...valueParts] = field.split(':');
     const value = valueParts.join(':').trim();
     
-    if (key.startsWith('FN')) contact.name = value;
-    else if (key.startsWith('ORG')) contact.company = value;
-    else if (key.startsWith('EMAIL')) contact.email = value;
-    else if (key.startsWith('TEL')) {
-      if (!contact.phones) contact.phones = [];
-      contact.phones.push(value);
+    if (!value) continue;
+    
+    switch (key.toUpperCase()) {
+      case 'N':
+        // Parse name (lastname,firstname)
+        const nameParts = value.split(',');
+        const lastName = nameParts[0] || '';
+        const firstName = nameParts[1] || '';
+        contact.name = `${firstName} ${lastName}`.trim();
+        break;
+      case 'ORG':
+        contact.company = value;
+        break;
+      case 'EMAIL':
+        contact.email = value;
+        break;
+      case 'TEL':
+        if (!contact.phones) contact.phones = [];
+        contact.phones.push(value);
+        break;
+      case 'URL':
+        contact.website = value;
+        break;
+      case 'ADR':
+        contact.address = value;
+        break;
+      case 'NOTE':
+        contact.services = value;
+        break;
     }
-    else if (key.startsWith('URL')) contact.website = value;
-    else if (key.startsWith('ADR')) contact.address = value.replace(/;/g, ', ');
-    else if (key.startsWith('TITLE')) contact.services = value;
   }
   
   return contact;

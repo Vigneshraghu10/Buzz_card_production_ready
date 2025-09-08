@@ -14,6 +14,7 @@ interface Stats {
   contactsCount: number;
   groupsCount: number;
   templatesCount: number;
+  digitalCardsCount: number;
 }
 
 interface UserSubscription {
@@ -40,6 +41,7 @@ export default function Dashboard() {
     contactsCount: 0,
     groupsCount: 0,
     templatesCount: 0,
+    digitalCardsCount: 0,
   });
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +74,7 @@ export default function Dashboard() {
         }
 
         // Fetch counts for all collections
-        const collections = ["contacts", "groups", "templates"];
+        const collections = ["contacts", "groups", "templates", "digitalCards"];
         const counts = await Promise.all(
           collections.map(async (collectionName) => {
             const collRef = collection(db, collectionName);
@@ -86,6 +88,7 @@ export default function Dashboard() {
           contactsCount: counts[0],
           groupsCount: counts[1],
           templatesCount: counts[2],
+          digitalCardsCount: counts[3],
         });
 
         // Fetch recent activities from contacts with source information
@@ -154,7 +157,7 @@ export default function Dashboard() {
   const statsCards = [
     { name: "Total Contacts", count: stats.contactsCount, icon: Users, color: "from-blue-500 to-blue-600" },
     { name: "Groups", count: stats.groupsCount, icon: Layers, color: "from-green-500 to-green-600" },
-    { name: "Templates", count: stats.templatesCount, icon: FileText, color: "from-yellow-500 to-yellow-600" },
+    { name: "Digital Cards", count: stats.digitalCardsCount, icon: CreditCard, color: "from-purple-500 to-purple-600" },
     { 
       name: "Subscription", 
       count: hasActiveSubscription ? "Active" : "None", 
