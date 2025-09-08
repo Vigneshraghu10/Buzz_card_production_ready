@@ -5,18 +5,21 @@ import { db } from "@/lib/firebase";
 import { uploadToStorage } from "@/utils/upload";
 import { buildVCard } from "@/utils/vcard";
 import { generateQrFromText } from "@/utils/qr";
+import { useUsageLimits } from "@/hooks/useUsageLimits";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import UsageLimitModal from "@/components/UsageLimitModal";
 import { 
   Save, Download, Link as LinkIcon, QrCode, Camera, Mail, Phone, 
   Globe, MapPin, Briefcase, Award, Users, Palette, Sparkles,
   Building2, Star, Heart, Zap, Crown, Coffee, Laptop, Paintbrush,
-  Rocket, Diamond
+  Rocket, Diamond, Square, Circle, Hexagon
 } from "lucide-react";
 
 interface DigitalCard {
@@ -39,6 +42,7 @@ interface DigitalCard {
   template: string;
   primaryColor: string;
   secondaryColor: string;
+  qrStyle: string;
   updatedAt: Date;
 }
 
@@ -128,14 +132,25 @@ const COLOR_SCHEMES = [
   { primary: '#F97316', secondary: '#EA580C', name: 'Sunset Orange' }
 ];
 
+const QR_STYLES = [
+  { id: 'square', name: 'Square', icon: Square, description: 'Classic square dots' },
+  { id: 'rounded', name: 'Rounded', icon: Circle, description: 'Smooth rounded corners' },
+  { id: 'dots', name: 'Dots', icon: Circle, description: 'Clean circular dots' },
+  { id: 'hearts', name: 'Hearts', icon: Heart, description: 'Romantic heart shapes' },
+  { id: 'stars', name: 'Stars', icon: Star, description: 'Elegant star pattern' },
+  { id: 'hexagon', name: 'Hexagon', icon: Hexagon, description: 'Modern hexagonal design' },
+];
+
 export default function AdvancedDigitalCard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { usage, limits, canAddDigitalCard, refreshUsage } = useUsageLimits();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [digitalCard, setDigitalCard] = useState<DigitalCard>({
     ownerId: user?.uid || "",
     publicId: "",
@@ -153,6 +168,7 @@ export default function AdvancedDigitalCard() {
     template: 'modern',
     primaryColor: '#3B82F6',
     secondaryColor: '#1E40AF',
+    qrStyle: 'square',
     updatedAt: new Date(),
   });
 
@@ -298,6 +314,12 @@ export default function AdvancedDigitalCard() {
   };
 
   const handleSaveProfile = async () => {
+    // Check usage limits for new digital cards
+    if (!digitalCard.id && !canAddDigitalCard) {
+      setShowLimitModal(true);
+      return;
+    }
+
     setSaving(true);
     
     try {
@@ -312,6 +334,9 @@ export default function AdvancedDigitalCard() {
       } else {
         const docRef = await addDoc(collection(db, "digitalCards"), cardData);
         setDigitalCard(prev => ({ ...prev, id: docRef.id }));
+        
+        // Refresh usage after creating new digital card
+        await refreshUsage();
       }
 
       toast({
@@ -1317,6 +1342,33 @@ export default function AdvancedDigitalCard() {
                         placeholder="Share what clients say about your work..."
                       />
                     </div>
+
+                    {/* QR Code Style Selector */}
+                    <div className="sm:col-span-2">
+                      <Label className="flex items-center text-sm font-medium text-gray-700 mb-3">
+                        <QrCode className="h-4 w-4 mr-1" />
+                        QR Code Style
+                      </Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {QR_STYLES.map((style) => (
+                          <div
+                            key={style.id}
+                            className={`cursor-pointer rounded-lg p-3 border-2 transition-all duration-200 hover:scale-105 ${
+                              digitalCard.qrStyle === style.id
+                                ? 'border-purple-500 bg-purple-50 shadow-md'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            onClick={() => setDigitalCard(prev => ({ ...prev, qrStyle: style.id }))}
+                          >
+                            <div className="flex flex-col items-center text-center">
+                              <style.icon className="h-6 w-6 mb-2 text-purple-600" />
+                              <p className="text-xs font-medium text-gray-700">{style.name}</p>
+                              <p className="text-xs text-gray-500 mt-1">{style.description}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Action Buttons */}
@@ -1416,6 +1468,15 @@ export default function AdvancedDigitalCard() {
           </div>
         </div>
       </div>
+
+      {/* Usage Limit Modal */}
+      <UsageLimitModal
+        isOpen={showLimitModal}
+        onClose={() => setShowLimitModal(false)}
+        feature="digitalCard"
+        currentCount={usage.digitalCardsCount}
+        limit={limits.digitalCards}
+      />
     </div>
   );
 }
