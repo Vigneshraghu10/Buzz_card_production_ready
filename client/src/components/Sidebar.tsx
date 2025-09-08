@@ -51,12 +51,6 @@ const navigation = [
     description: "Bulk AI extraction",
     isNew: true
   },
-  // { 
-  //   name: "Pricing", 
-  //   href: "/scanned-cards", 
-  //   icon: DollarSign, 
-  //   description: "View and manage subscription plans"
-  // },
   { 
     name: "Digital Card", 
     href: "/digital-card", 
@@ -65,16 +59,10 @@ const navigation = [
   },
   { 
     name: "NFC Card", 
-    href: "/nfc-card",  // 👈 make sure you have this route
+    href: "/nfc-card",
     icon: Smartphone, 
     description: "Tap to share contacts",
-    isComingSoon: true   // optional flag to show badge
-  },
-  { 
-    name: "Pricing", 
-    href: "/scanned-cards", 
-    icon: DollarSign, 
-    description: "View and manage subscription plans"
+    isComingSoon: true
   },
   { 
     name: "Settings", 
