@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, addDoc, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { processMultipleBusinessCards, validateImageFile, type MultiCardResult } from "@/utils/multiCardOcr";
 import type { ParsedContact } from "@/utils/parse";
+import { useUsageLimits } from "@/hooks/useUsageLimits";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import CameraCapture from "@/components/CameraCapture";
+import UsageLimitModal from "@/components/UsageLimitModal";
 import { 
   Upload, 
   Loader2, 
@@ -25,9 +28,10 @@ import {
   Edit,
   Save,
   X,
-  Lock
+  Smartphone,
+  Sparkles,
+  Zap
 } from "lucide-react";
-import PricingSection from "@/components/PricingSection";
 
 interface ProcessedCard extends ParsedContact {
   id: string;
@@ -39,6 +43,7 @@ interface ProcessedCard extends ParsedContact {
 export default function EnhancedBulkUploads() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { usage, limits, hasActiveSubscription, canUseAIScan, loading: limitsLoading, refreshUsage } = useUsageLimits();
   
   const [files, setFiles] = useState<File[]>([]);
   const [processing, setProcessing] = useState(false);
@@ -49,36 +54,20 @@ export default function EnhancedBulkUploads() {
   const [editingCard, setEditingCard] = useState<ProcessedCard | null>(null);
   const [editData, setEditData] = useState<ParsedContact>({});
   const [saving, setSaving] = useState<string | null>(null);
-  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [showCamera, setShowCamera] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
-  // Check subscription status
-  useState(() => {
-    const checkSubscription = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          const subscription = userData.subscription;
-          const isActive = subscription && 
-            subscription.status === 'active' && 
-            new Date() < new Date(subscription.expiryDate?.toDate?.() || subscription.expiryDate);
-          setHasActiveSubscription(!!isActive);
-        }
-      } catch (error) {
-        console.error("Error checking subscription:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    checkSubscription();
-  });
+  const handleCameraCapture = (file: File) => {
+    setFiles(prev => [...prev, file]);
+  };
+
+  const checkUsageLimit = () => {
+    if (!canUseAIScan) {
+      setShowLimitModal(true);
+      return false;
+    }
+    return true;
+  };
 
   const handleFileSelect = useCallback((selectedFiles: FileList | null) => {
     if (!selectedFiles) return;
@@ -108,6 +97,10 @@ export default function EnhancedBulkUploads() {
 
   const processFiles = async () => {
     if (!user || files.length === 0) return;
+    
+    if (!checkUsageLimit()) {
+      return;
+    }
     
     setProcessing(true);
     setProgress(0);
@@ -206,6 +199,9 @@ export default function EnhancedBulkUploads() {
         description: `${card.name || 'Contact'} has been saved successfully`,
       });
       
+      // Refresh usage after saving
+      await refreshUsage();
+      
     } catch (error) {
       console.error("Error saving contact:", error);
       toast({
@@ -231,6 +227,9 @@ export default function EnhancedBulkUploads() {
       title: "All Contacts Saved",
       description: `Successfully saved ${unsavedCards.length} contacts`,
     });
+    
+    // Refresh usage after saving all
+    await refreshUsage();
   };
 
   const handleEditCard = (card: ProcessedCard) => {
@@ -256,7 +255,7 @@ export default function EnhancedBulkUploads() {
     });
   };
 
-  if (loading) {
+  if (limitsLoading) {
     return (
       <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -503,47 +502,115 @@ export default function EnhancedBulkUploads() {
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">AI-Powered Bulk Business Card Processing</h2>
-          <p className="text-gray-600">
-            Upload images containing multiple business cards. Our AI will detect each card individually and extract contact information, including QR codes.
-          </p>
-        </div>
-
-        {/* File Upload Area */}
-        <Card className="mb-8">
-          <CardContent className="p-8">
-            <div
-              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                handleFileSelect(e.dataTransfer.files);
-              }}
-              onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.multiple = true;
-                input.accept = 'image/*';
-                input.onchange = (e) => {
-                  const target = e.target as HTMLInputElement;
-                  handleFileSelect(target.files);
-                };
-                input.click();
-              }}
-            >
-              <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                Upload Business Card Images
-              </h3>
-              <p className="text-gray-600 mb-4">
-                Drag and drop images here, or click to browse
-              </p>
-              <p className="text-sm text-gray-500">
-                Supports JPG, PNG, GIF, WebP up to 10MB each. Can detect multiple cards per image.
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
+              <Sparkles className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold text-gray-900">AI Business Card Scanner</h2>
+              <p className="text-gray-600">
+                Powered by advanced AI for multi-card detection and QR code extraction
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+          
+          {/* Usage Status */}
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Zap className="h-5 w-5 text-blue-600" />
+                <div>
+                  <p className="font-medium text-blue-900">
+                    {hasActiveSubscription ? 'Premium Plan Active' : 'Free Plan'}
+                  </p>
+                  <p className="text-sm text-blue-700">
+                    {hasActiveSubscription 
+                      ? 'Unlimited AI scans available' 
+                      : `${usage.aiScansCount}/${limits.aiScans} AI scans used`
+                    }
+                  </p>
+                </div>
+              </div>
+              {!canUseAIScan && (
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowLimitModal(true)}
+                  className="bg-gradient-to-r from-blue-600 to-purple-600"
+                >
+                  Upgrade Now
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Upload Options */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* File Upload */}
+          <Card className="group hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-6">
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer group-hover:border-blue-400"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (checkUsageLimit()) {
+                    handleFileSelect(e.dataTransfer.files);
+                  }
+                }}
+                onClick={() => {
+                  if (checkUsageLimit()) {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.accept = 'image/*';
+                    input.onchange = (e) => {
+                      const target = e.target as HTMLInputElement;
+                      handleFileSelect(target.files);
+                    };
+                    input.click();
+                  }
+                }}
+              >
+                <Upload className="mx-auto h-10 w-10 text-blue-500 mb-3" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Upload Images
+                </h3>
+                <p className="text-gray-600 text-sm mb-3">
+                  Drag and drop or click to browse
+                </p>
+                <p className="text-xs text-gray-500">
+                  JPG, PNG, GIF, WebP up to 10MB
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Camera Capture */}
+          <Card className="group hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-6">
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-green-500 transition-colors cursor-pointer group-hover:border-green-400"
+                onClick={() => {
+                  if (checkUsageLimit()) {
+                    setShowCamera(true);
+                  }
+                }}
+              >
+                <Smartphone className="mx-auto h-10 w-10 text-green-500 mb-3" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Use Camera
+                </h3>
+                <p className="text-gray-600 text-sm mb-3">
+                  Capture cards directly with camera
+                </p>
+                <p className="text-xs text-gray-500">
+                  Up to 10 cards per session
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Selected Files */}
         {files.length > 0 && (
@@ -609,34 +676,59 @@ export default function EnhancedBulkUploads() {
 
         {/* Features Info */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
+          <Card className="group hover:shadow-lg transition-all duration-300">
             <CardContent className="p-6 text-center">
-              <Camera className="h-8 w-8 text-blue-500 mx-auto mb-3" />
+              <div className="p-3 bg-blue-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
+                <Camera className="h-10 w-10 text-blue-600" />
+              </div>
               <h3 className="font-semibold mb-2">Multi-Card Detection</h3>
               <p className="text-sm text-gray-600">
-                Automatically detects and processes multiple business cards in a single image
+                Advanced AI detects and processes multiple business cards in a single image
               </p>
             </CardContent>
           </Card>
-          <Card>
+          
+          <Card className="group hover:shadow-lg transition-all duration-300">
             <CardContent className="p-6 text-center">
-              <Eye className="h-8 w-8 text-green-500 mx-auto mb-3" />
-              <h3 className="font-semibold mb-2">QR Code Recognition</h3>
+              <div className="p-3 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-green-200 transition-colors">
+                <Eye className="h-10 w-10 text-green-600" />
+              </div>
+              <h3 className="font-semibold mb-2">QR Code & vCard Support</h3>
               <p className="text-sm text-gray-600">
-                Extracts contact information and URLs from QR codes on business cards
+                Extracts contact data from QR codes, vCards, and MeCards automatically
               </p>
             </CardContent>
           </Card>
-          <Card>
+          
+          <Card className="group hover:shadow-lg transition-all duration-300">
             <CardContent className="p-6 text-center">
-              <Users className="h-8 w-8 text-purple-500 mx-auto mb-3" />
-              <h3 className="font-semibold mb-2">Smart Data Separation</h3>
+              <div className="p-3 bg-purple-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
+                <Users className="h-10 w-10 text-purple-600" />
+              </div>
+              <h3 className="font-semibold mb-2">Smart Data Organization</h3>
               <p className="text-sm text-gray-600">
-                Automatically separates mobile numbers from landlines for better organization
+                Automatically categorizes mobile numbers, landlines, and contact details
               </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Camera Capture Modal */}
+        <CameraCapture
+          isOpen={showCamera}
+          onClose={() => setShowCamera(false)}
+          onCapture={handleCameraCapture}
+          maxImages={10}
+        />
+
+        {/* Usage Limit Modal */}
+        <UsageLimitModal
+          isOpen={showLimitModal}
+          onClose={() => setShowLimitModal(false)}
+          feature="aiScan"
+          currentCount={usage.aiScansCount}
+          limit={limits.aiScans}
+        />
       </div>
     </div>
   );
