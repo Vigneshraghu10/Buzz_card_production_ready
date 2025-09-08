@@ -6,7 +6,7 @@ import {
 import { db } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, Lock } from "lucide-react";
+import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, Lock, CreditCard } from "lucide-react";
 import { useLocation } from "wouter";
 import PricingSection from "@/components/PricingSection";
 
@@ -14,7 +14,6 @@ interface Stats {
   contactsCount: number;
   groupsCount: number;
   templatesCount: number;
-  scannedCardsCount: number;
 }
 
 interface UserSubscription {
@@ -41,7 +40,6 @@ export default function Dashboard() {
     contactsCount: 0,
     groupsCount: 0,
     templatesCount: 0,
-    scannedCardsCount: 0,
   });
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,20 +82,10 @@ export default function Dashboard() {
           })
         );
 
-        // Get scanned cards count from contacts where source is business card scan
-        const scannedCardsQuery = query(
-          collection(db, "contacts"),
-          where("ownerId", "==", user.uid),
-          where("source", "in", ["business_card_scan", "bulk_scan"])
-        );
-        const scannedCardsSnapshot = await getCountFromServer(scannedCardsQuery);
-        const scannedCardsCount = scannedCardsSnapshot.data().count;
-
         setStats({
           contactsCount: counts[0],
           groupsCount: counts[1],
           templatesCount: counts[2],
-          scannedCardsCount: scannedCardsCount,
         });
 
         // Fetch recent activities from contacts with source information
@@ -115,30 +103,31 @@ export default function Dashboard() {
           const data = doc.data();
           const timestamp = data.createdAt?.toDate() || new Date();
           const source = data.source || 'manual';
+          const contactName = `${data.name || data.firstName || ''} ${data.lastName || ''}`.trim() || 'Unknown Contact';
           
           if (source === 'business_card_scan') {
             activities.push({
               id: doc.id,
               type: 'scan',
-              description: `Scanned business card for ${data.firstName} ${data.lastName}`.trim(),
+              description: `Scanned business card: ${contactName}`,
               timestamp,
-              details: data.company ? `Company: ${data.company}` : undefined
+              details: data.company ? `Company: ${data.company}` : `Email: ${data.email || 'Not provided'}`
             });
           } else if (source === 'bulk_scan') {
             activities.push({
               id: doc.id,
               type: 'bulk_scan',
-              description: `Bulk scanned card for ${data.firstName} ${data.lastName}`.trim(),
+              description: `AI bulk scan: ${contactName}`,
               timestamp,
-              details: data.company ? `Company: ${data.company}` : undefined
+              details: data.company ? `Company: ${data.company}` : `Phone: ${data.phones?.[0] || 'Not provided'}`
             });
           } else if (source === 'manual' || !source) {
             activities.push({
               id: doc.id,
               type: 'contact_add',
-              description: `Added contact ${data.firstName} ${data.lastName}`.trim(),
+              description: `Added contact: ${contactName}`,
               timestamp,
-              details: data.company ? `Company: ${data.company}` : undefined
+              details: data.company ? `Company: ${data.company}` : `Email: ${data.email || 'Not provided'}`
             });
           }
         });
@@ -161,7 +150,13 @@ export default function Dashboard() {
     { name: "Total Contacts", count: stats.contactsCount, icon: Users, color: "from-blue-500 to-blue-600" },
     { name: "Groups", count: stats.groupsCount, icon: Layers, color: "from-green-500 to-green-600" },
     { name: "Templates", count: stats.templatesCount, icon: FileText, color: "from-yellow-500 to-yellow-600" },
-    { name: "Scanned Cards", count: stats.scannedCardsCount, icon: Camera, color: "from-purple-500 to-purple-600" },
+    { 
+      name: "Subscription", 
+      count: hasActiveSubscription ? "Active" : "None", 
+      icon: Lock, 
+      color: hasActiveSubscription ? "from-green-500 to-green-600" : "from-gray-400 to-gray-500",
+      isSubscription: true
+    },
   ];
 
   // Check if user has active subscription
@@ -172,35 +167,31 @@ export default function Dashboard() {
   const quickActions = [
     { 
       name: "Add Contact", 
-      description: hasActiveSubscription ? "Create a new contact entry" : "Requires subscription", 
-      icon: hasActiveSubscription ? UserPlus : Lock, 
-      color: hasActiveSubscription ? "from-blue-50 to-blue-100 text-blue-600 border-blue-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
-      action: () => hasActiveSubscription ? setLocation("/contacts") : setShowPricing(true),
-      disabled: !hasActiveSubscription
+      description: "Create a new contact entry", 
+      icon: UserPlus, 
+      color: "from-blue-50 to-blue-100 text-blue-600 border-blue-200", 
+      action: () => setLocation("/contacts")
     },
     { 
       name: "Create Template", 
-      description: hasActiveSubscription ? "Design a new message template" : "Requires subscription", 
-      icon: hasActiveSubscription ? FilePlus : Lock, 
-      color: hasActiveSubscription ? "from-yellow-50 to-yellow-100 text-yellow-600 border-yellow-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
-      action: () => hasActiveSubscription ? setLocation("/templates") : setShowPricing(true),
-      disabled: !hasActiveSubscription
+      description: "Design a new message template", 
+      icon: FilePlus, 
+      color: "from-yellow-50 to-yellow-100 text-yellow-600 border-yellow-200", 
+      action: () => setLocation("/templates")
     },
     { 
-      name: "Bulk Upload", 
-      description: hasActiveSubscription ? "Upload multiple business cards" : "Requires subscription", 
-      icon: hasActiveSubscription ? CloudUpload : Lock, 
-      color: hasActiveSubscription ? "from-green-50 to-green-100 text-green-600 border-green-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
-      action: () => hasActiveSubscription ? setLocation("/bulk-uploads") : setShowPricing(true),
-      disabled: !hasActiveSubscription
+      name: "AI Card Scanner", 
+      description: "Upload multiple business cards", 
+      icon: Camera, 
+      color: "from-green-50 to-green-100 text-green-600 border-green-200", 
+      action: () => setLocation("/bulk-uploads")
     },
     { 
-      name: "Scan Card", 
-      description: hasActiveSubscription ? "Extract contact info from image" : "Requires subscription", 
-      icon: hasActiveSubscription ? Camera : Lock, 
-      color: hasActiveSubscription ? "from-purple-50 to-purple-100 text-purple-600 border-purple-200" : "from-gray-50 to-gray-100 text-gray-400 border-gray-200", 
-      action: () => hasActiveSubscription ? setLocation("/bulk-uploads") : setShowPricing(true),
-      disabled: !hasActiveSubscription
+      name: "Digital Card", 
+      description: "Create your digital business card", 
+      icon: CreditCard, 
+      color: "from-purple-50 to-purple-100 text-purple-600 border-purple-200", 
+      action: () => setLocation("/digital-card")
     },
   ];
 
@@ -372,7 +363,18 @@ export default function Dashboard() {
                             animationFillMode: 'both'
                           }}
                         >
-                          {card.count}
+                          {card.isSubscription ? (
+                            <span className={`text-lg ${hasActiveSubscription ? 'text-green-600' : 'text-gray-500'}`}>
+                              {card.count}
+                              {hasActiveSubscription && userSubscription && (
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Expires: {new Date(userSubscription.expiryDate?.toDate?.() || userSubscription.expiryDate).toLocaleDateString()}
+                                </div>
+                              )}
+                            </span>
+                          ) : (
+                            card.count
+                          )}
                         </p>
                       </div>
                     </div>
@@ -405,9 +407,8 @@ export default function Dashboard() {
             >
               <Button
                 variant="outline"
-                className={`h-auto p-6 flex flex-col items-start space-y-4 transition-all duration-300 border-2 bg-gradient-to-br ${action.color} ${action.disabled ? 'cursor-not-allowed opacity-60' : ''}`}
+                className={`h-auto p-6 flex flex-col items-start space-y-4 transition-all duration-300 border-2 bg-gradient-to-br ${action.color}`}
                 onClick={action.action}
-                disabled={action.disabled}
               >
                 <div className="rounded-2xl inline-flex p-4 shadow-md icon-spin">
                   <action.icon className="h-6 w-6" />
@@ -491,12 +492,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Pricing Section - Show if no active subscription */}
-      {showPricing && (
-        <div className="mt-16">
-          <PricingSection />
-        </div>
-      )}
     </div>
   );
 }

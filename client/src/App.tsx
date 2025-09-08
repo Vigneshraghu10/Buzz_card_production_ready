@@ -20,6 +20,7 @@ import EnhancedBulkUploads from "@/pages/BulkUploads/EnhancedBulkUploads";
 import DigitalCard from "@/pages/DigitalCard/DigitalCard";
 import Settings from "@/pages/Settings/Settings";
 import NFCCard from "@/pages/NFCCard/NFCCard";
+import Pricing from "@/pages/Pricing/Pricing";
 
 // Public Pages
 import PublicShare from "@/pages/PublicShare/PublicShare";
@@ -94,6 +95,14 @@ function Router() {
         <PrivateRoute>
           <Layout>
             <NFCCard />
+          </Layout>
+        </PrivateRoute>
+      </Route>
+
+      <Route path="/pricing">
+        <PrivateRoute>
+          <Layout>
+            <Pricing />
           </Layout>
         </PrivateRoute>
       </Route>

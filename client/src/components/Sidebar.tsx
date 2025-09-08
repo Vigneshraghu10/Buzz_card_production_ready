@@ -65,6 +65,12 @@ const navigation = [
     isComingSoon: true
   },
   { 
+    name: "Pricing", 
+    href: "/pricing", 
+    icon: DollarSign, 
+    description: "Subscription plans"
+  },
+  { 
     name: "Settings", 
     href: "/settings", 
     icon: Settings, 

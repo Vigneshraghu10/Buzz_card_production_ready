@@ -269,22 +269,23 @@ export default function EnhancedBulkUploads() {
     );
   }
 
-  if (!hasActiveSubscription) {
-    return (
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <div className="text-center mb-8">
-            <Lock className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Subscription Required</h2>
-            <p className="text-gray-600 mb-8">
-              Bulk upload and AI-powered business card processing requires an active subscription.
-            </p>
-          </div>
-          <PricingSection />
-        </div>
-      </div>
-    );
-  }
+  // Temporarily enable for testing - remove subscription check
+  // if (!hasActiveSubscription) {
+  //   return (
+  //     <div className="py-6">
+  //       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+  //         <div className="text-center mb-8">
+  //           <Lock className="mx-auto h-16 w-16 text-gray-400 mb-4" />
+  //           <h2 className="text-2xl font-bold text-gray-900 mb-4">Subscription Required</h2>
+  //           <p className="text-gray-600 mb-8">
+  //             Bulk upload and AI-powered business card processing requires an active subscription.
+  //           </p>
+  //         </div>
+  //         <PricingSection />
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   if (showResults) {
     return (
