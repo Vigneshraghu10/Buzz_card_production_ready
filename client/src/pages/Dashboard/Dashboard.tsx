@@ -146,6 +146,11 @@ export default function Dashboard() {
     fetchStats();
   }, [user]);
 
+  // Check if user has active subscription
+  const hasActiveSubscription = userSubscription && 
+    userSubscription.status === 'active' && 
+    new Date() < new Date(userSubscription.expiryDate?.toDate?.() || userSubscription.expiryDate);
+
   const statsCards = [
     { name: "Total Contacts", count: stats.contactsCount, icon: Users, color: "from-blue-500 to-blue-600" },
     { name: "Groups", count: stats.groupsCount, icon: Layers, color: "from-green-500 to-green-600" },
@@ -158,11 +163,6 @@ export default function Dashboard() {
       isSubscription: true
     },
   ];
-
-  // Check if user has active subscription
-  const hasActiveSubscription = userSubscription && 
-    userSubscription.status === 'active' && 
-    new Date() < new Date(userSubscription.expiryDate?.toDate?.() || userSubscription.expiryDate);
 
   const quickActions = [
     { 
