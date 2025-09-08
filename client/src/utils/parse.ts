@@ -2,10 +2,17 @@ export type ParsedContact = {
   name?: string;
   company?: string;
   phones?: string[];
+  landlines?: string[];
   email?: string;
   services?: string;
   address?: string;
-  qr?: string;
+  website?: string;
+  social?: string;
+  qrCodes?: Array<{
+    type: 'contact' | 'url' | 'text';
+    data: string;
+    extractedInfo?: any;
+  }>;
 };
 
 function extractPhoneNumbers(text: string): string[] {

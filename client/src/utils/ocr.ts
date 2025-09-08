@@ -246,7 +246,7 @@ export async function callGeminiAPI(imageInput: File | string): Promise<ParsedCo
         name: (parsedData.name || '').toString().trim(),
         company: (parsedData.company || '').toString().trim(),
         email: (parsedData.email || '').toString().toLowerCase().trim(),
-        phone: (parsedData.phone || '').toString().trim(),
+        phones: [(parsedData.phone || '').toString().trim()].filter(p => p),
         services: (parsedData.services || '').toString().trim(),
         address: (parsedData.address || '').toString().trim(),
         website: (parsedData.website || '').toString().trim(),
