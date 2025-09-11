@@ -6,7 +6,7 @@ import {
 import { db } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, CreditCard, Crown, Shield } from "lucide-react";
+import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, CreditCard, Crown, Shield, Settings } from "lucide-react";
 import { useLocation } from "wouter";
 import { useUsageLimits } from "@/hooks/useUsageLimits";
 
@@ -193,6 +193,13 @@ export default function Dashboard() {
       icon: CreditCard, 
       color: "from-purple-50 to-purple-100 text-purple-600 border-purple-200", 
       action: () => setLocation("/digital-card") 
+    },
+    { 
+      name: "Manage Cards", 
+      description: "View and manage digital cards", 
+      icon: Settings, 
+      color: "from-indigo-50 to-indigo-100 text-indigo-600 border-indigo-200", 
+      action: () => setLocation("/manage-cards") 
     },
   ];
 
@@ -406,7 +413,13 @@ export default function Dashboard() {
                 animationFillMode: 'both' 
               }}
             >
-              <Card className="relative overflow-hidden border-0 shadow-xl backdrop-blur-sm shimmer-effect">
+              <Card 
+                className={`relative overflow-hidden border-0 shadow-xl backdrop-blur-sm shimmer-effect ${
+                  card.name === "Digital Cards" ? "cursor-pointer hover:shadow-2xl hover:scale-105 transition-all duration-300" : ""
+                }`}
+                onClick={card.name === "Digital Cards" ? () => setLocation("/manage-cards") : undefined}
+                data-testid={card.name === "Digital Cards" ? "card-digital-cards-manage" : undefined}
+              >
                 <CardContent className="p-6 relative z-10">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
@@ -414,7 +427,12 @@ export default function Dashboard() {
                         <card.icon className="text-white h-7 w-7" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600 mb-1">{card.name}</p>
+                        <p className="text-sm font-medium text-gray-600 mb-1">
+                          {card.name}
+                          {card.name === "Digital Cards" && (
+                            <span className="text-xs text-blue-500 ml-2">(Click to manage)</span>
+                          )}
+                        </p>
                         <p 
                           className="text-3xl font-bold text-gray-900 animate-pulse-gentle"
                           style={{ 
