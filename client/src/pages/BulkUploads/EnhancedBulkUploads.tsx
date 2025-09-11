@@ -1,8 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, query, where, getDocs, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { processMultipleBusinessCards, validateImageFile, type MultiCardResult } from "@/utils/multiCardOcr";
+import { uploadToStorage } from "@/utils/upload";
+import { isDuplicateContact } from "@/utils/duplicate";
 import type { ParsedContact } from "@/utils/parse";
 import { useUsageLimits } from "@/hooks/useUsageLimits";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import CameraCapture from "@/components/CameraCapture";
 import UsageLimitModal from "@/components/UsageLimitModal";
@@ -30,7 +33,19 @@ import {
   X,
   Smartphone,
   Sparkles,
-  Zap
+  Zap,
+  CloudUpload,
+  Check,
+  Clock,
+  Brain,
+  FileImage,
+  AlertCircle,
+  CheckCircle2,
+  QrCode,
+  ScanLine,
+  CameraOff,
+  RotateCcw,
+  ArrowRight
 } from "lucide-react";
 
 interface ProcessedCard extends ParsedContact {
@@ -38,7 +53,30 @@ interface ProcessedCard extends ParsedContact {
   status: 'success' | 'error' | 'duplicate';
   error?: string;
   saved?: boolean;
+  isFromCamera?: boolean;
+  captureIndex?: number;
+  qrCodes?: { type: string; data: string }[];
+  imageUrl?: string;
 }
+
+interface Group {
+  id: string;
+  name: string;
+  ownerId: string;
+}
+
+interface UploadResult {
+  id: string;
+  file: File;
+  imageUrl?: string;
+  status: "uploading" | "processing" | "completed" | "error";
+  error?: string;
+  isFromCamera?: boolean;
+  captureIndex?: number;
+}
+
+// Helper function to add delay between operations
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export default function EnhancedBulkUploads() {
   const { user } = useAuth();
@@ -54,11 +92,198 @@ export default function EnhancedBulkUploads() {
   const [editingCard, setEditingCard] = useState<ProcessedCard | null>(null);
   const [editData, setEditData] = useState<ParsedContact>({});
   const [saving, setSaving] = useState<string | null>(null);
-  const [showCamera, setShowCamera] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  
+  // Enhanced camera and upload states
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(true);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [captureCount, setCaptureCount] = useState(0);
+  const [cameraMode, setCameraMode] = useState<'capture' | 'processing'>('capture');
+  const [pendingCaptures, setPendingCaptures] = useState<UploadResult[]>([]);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const handleCameraCapture = (file: File) => {
-    setFiles(prev => [...prev, file]);
+  useEffect(() => {
+    if (!user) return;
+    fetchGroups();
+  }, [user]);
+
+  // Cleanup camera stream on component unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  const fetchGroups = async () => {
+    try {
+      const groupsQuery = query(collection(db, "groups"), where("ownerId", "==", user!.uid));
+      const groupsSnapshot = await getDocs(groupsQuery);
+      const groupsData = groupsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Group[];
+      setGroups(groupsData);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+      toast({
+        title: "Warning",
+        description: "Could not load groups. You can still process cards.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      setCameraError(null);
+      
+      // Stop existing stream if any
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      });
+
+      setCameraStream(stream);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (error: any) {
+      console.error('Camera error:', error);
+      let errorMessage = 'Failed to access camera';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No camera found on this device.';
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = 'Camera not supported on this device.';
+      }
+      
+      setCameraError(errorMessage);
+      toast({
+        title: "Camera Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+    setCameraError(null);
+    setCaptureCount(0);
+    setCameraMode('capture');
+    setPendingCaptures([]);
+  };
+
+  const switchCamera = async () => {
+    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+    await startCamera();
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return;
+
+    // Set canvas size to video dimensions
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Draw video frame to canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Convert to blob
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+
+      const newCaptureCount = captureCount + 1;
+      setCaptureCount(newCaptureCount);
+      
+      const timestamp = Date.now();
+      const file = new File([blob], `camera-capture-${newCaptureCount}-${timestamp}.jpg`, {
+        type: 'image/jpeg',
+      });
+
+      // Add to pending captures
+      const newResult: UploadResult = {
+        id: Math.random().toString(36).substr(2, 9),
+        file,
+        status: "uploading",
+        isFromCamera: true,
+        captureIndex: newCaptureCount,
+      };
+
+      setPendingCaptures(prev => [...prev, newResult]);
+      
+      toast({
+        title: `Photo ${newCaptureCount} Captured`,
+        description: "Ready to capture more or process all captures",
+      });
+    }, 'image/jpeg', 0.9);
+  };
+
+  const processAllCaptures = async () => {
+    if (pendingCaptures.length === 0) return;
+    
+    setCameraMode('processing');
+    setUploading(true);
+    
+    // Convert captures to files array
+    const captureFiles = pendingCaptures.map(capture => capture.file);
+    setFiles(prev => [...prev, ...captureFiles]);
+    
+    // Start processing
+    await processFiles();
+    
+    setUploading(false);
+    setPendingCaptures([]);
+    setCaptureCount(0);
+    setCameraMode('capture');
+    stopCamera();
+    
+    toast({
+      title: "Processing Complete",
+      description: `Successfully processed ${pendingCaptures.length} captured images`,
+    });
+  };
+
+  const clearCaptures = () => {
+    setPendingCaptures([]);
+    setCaptureCount(0);
+    toast({
+      title: "Captures Cleared",
+      description: "Ready to capture new photos",
+    });
   };
 
   const checkUsageLimit = () => {
@@ -114,6 +339,17 @@ export default function EnhancedBulkUploads() {
         
         try {
           console.log(`Processing file ${i + 1}/${files.length}: ${file.name}`);
+          
+          // Upload to Firebase Storage first
+          const timestamp = Date.now();
+          const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const fileName = `${timestamp}-${sanitizedFileName}`;
+          const imageUrl = await uploadToStorage(
+            file, 
+            `users/${user!.uid}/bulk/${fileName}`
+          );
+
+          // Process with multi-card detection
           const result: MultiCardResult = await processMultipleBusinessCards(file);
           
           // Process each detected card
@@ -121,7 +357,9 @@ export default function EnhancedBulkUploads() {
             const processedCard: ProcessedCard = {
               ...card,
               id: `${file.name}_card_${cardIndex + 1}`,
-              status: 'success'
+              status: 'success',
+              imageUrl,
+              isFromCamera: file.name.includes('camera-capture')
             };
             results.push(processedCard);
           });
@@ -132,7 +370,8 @@ export default function EnhancedBulkUploads() {
               results.push({
                 id: `${file.name}_error_${errorIndex}`,
                 status: 'error',
-                error: error
+                error: error,
+                imageUrl
               });
             });
           }
@@ -146,6 +385,11 @@ export default function EnhancedBulkUploads() {
             status: 'error',
             error: error.message || "Failed to process image"
           });
+        }
+
+        // Add delay between files
+        if (i < files.length - 1) {
+          await delay(1000);
         }
       }
       
@@ -180,12 +424,38 @@ export default function EnhancedBulkUploads() {
     setSaving(card.id);
     
     try {
+      // Check for duplicates
+      if (card.email || card.phones?.length) {
+        const isDupe = await isDuplicateContact(
+          user.uid, 
+          card.email, 
+          card.phones?.[0] || ""
+        );
+        if (isDupe) {
+          toast({
+            title: "Duplicate Contact",
+            description: `${card.name || 'Contact'} already exists`,
+            variant: "destructive",
+          });
+          setSaving(null);
+          return;
+        }
+      }
+
       await addDoc(collection(db, "contacts"), {
-        ...card,
+        firstName: card.name?.split(' ')[0] || "",
+        lastName: card.name?.split(' ').slice(1).join(' ') || "",
+        phone: card.phones?.[0] || card.landlines?.[0] || "",
+        email: card.email?.toLowerCase() || "",
+        company: card.company || "",
+        services: card.services || "",
+        address: card.address || "",
+        groupIds: selectedGroupIds,
         ownerId: user.uid,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        source: "bulk_scan"
+        createdAt: serverTimestamp(),
+        source: card.isFromCamera ? 'camera' : 'bulk_scan',
+        hasQRData: !!(card.qrCodes && card.qrCodes.length > 0),
+        qrContent: card.qrCodes?.[0]?.data || null,
       });
       
       setProcessed(prev => 
@@ -219,14 +489,71 @@ export default function EnhancedBulkUploads() {
     
     const unsavedCards = processed.filter(card => card.status === 'success' && !card.saved);
     
+    let savedCount = 0;
+    let duplicateCount = 0;
+    let errorCount = 0;
+
     for (const card of unsavedCards) {
-      await saveContact(card);
+      try {
+        // Check for duplicates
+        if (card.email || card.phones?.length) {
+          const isDupe = await isDuplicateContact(
+            user.uid, 
+            card.email, 
+            card.phones?.[0] || ""
+          );
+          if (isDupe) {
+            duplicateCount++;
+            continue;
+          }
+        }
+
+        await addDoc(collection(db, "contacts"), {
+          firstName: card.name?.split(' ')[0] || "",
+          lastName: card.name?.split(' ').slice(1).join(' ') || "",
+          phone: card.phones?.[0] || card.landlines?.[0] || "",
+          email: card.email?.toLowerCase() || "",
+          company: card.company || "",
+          services: card.services || "",
+          address: card.address || "",
+          groupIds: selectedGroupIds,
+          ownerId: user.uid,
+          createdAt: serverTimestamp(),
+          source: card.isFromCamera ? 'camera' : 'bulk_scan',
+          hasQRData: !!(card.qrCodes && card.qrCodes.length > 0),
+          qrContent: card.qrCodes?.[0]?.data || null,
+        });
+
+        savedCount++;
+      } catch (contactError) {
+        console.error('Error saving individual contact:', contactError);
+        errorCount++;
+      }
+    }
+
+    let successMessage = `Saved ${savedCount} contact${savedCount !== 1 ? 's' : ''}`;
+    if (selectedGroupIds.length > 0) {
+      const groupNames = groups.filter(g => selectedGroupIds.includes(g.id)).map(g => g.name).join(', ');
+      successMessage += ` to group${selectedGroupIds.length > 1 ? 's' : ''}: ${groupNames}`;
+    }
+    if (duplicateCount > 0) {
+      successMessage += `, skipped ${duplicateCount} duplicate${duplicateCount !== 1 ? 's' : ''}`;
+    }
+    if (errorCount > 0) {
+      successMessage += `, ${errorCount} error${errorCount !== 1 ? 's' : ''}`;
     }
     
     toast({
-      title: "All Contacts Saved",
-      description: `Successfully saved ${unsavedCards.length} contacts`,
+      title: "Success",
+      description: successMessage,
     });
+
+    // Update saved status
+    setProcessed(prev => 
+      prev.map(p => 
+        p.status === 'success' && !p.saved ? { ...p, saved: true } : p
+      )
+    );
     
     // Refresh usage after saving all
     await refreshUsage();
@@ -255,6 +582,48 @@ export default function EnhancedBulkUploads() {
     });
   };
 
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "uploading":
+      case "processing":
+        return (
+          <div className="w-6 h-6 bg-yellow-100 rounded-full flex items-center justify-center">
+            <Clock className="h-3 w-3 text-yellow-600 animate-spin" />
+          </div>
+        );
+      case "completed":
+      case "success":
+        return (
+          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
+            <Check className="h-3 w-3 text-green-600" />
+          </div>
+        );
+      case "error":
+        return (
+          <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+            <AlertCircle className="h-3 w-3 text-red-600" />
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "uploading":
+      case "processing":
+        return "bg-yellow-50 text-yellow-700 border-yellow-200";
+      case "completed":
+      case "success":
+        return "bg-green-50 text-green-700 border-green-200";
+      case "error":
+        return "bg-red-50 text-red-700 border-red-200";
+      default:
+        return "bg-gray-50 text-gray-700 border-gray-200";
+    }
+  };
+
   if (limitsLoading) {
     return (
       <div className="py-6">
@@ -267,24 +636,6 @@ export default function EnhancedBulkUploads() {
       </div>
     );
   }
-
-  // Temporarily enable for testing - remove subscription check
-  // if (!hasActiveSubscription) {
-  //   return (
-  //     <div className="py-6">
-  //       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-  //         <div className="text-center mb-8">
-  //           <Lock className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-  //           <h2 className="text-2xl font-bold text-gray-900 mb-4">Subscription Required</h2>
-  //           <p className="text-gray-600 mb-8">
-  //             Bulk upload and AI-powered business card processing requires an active subscription.
-  //           </p>
-  //         </div>
-  //         <PricingSection />
-  //       </div>
-  //     </div>
-  //   );
-  // }
 
   if (showResults) {
     return (
@@ -314,6 +665,38 @@ export default function EnhancedBulkUploads() {
             </div>
           </div>
 
+          {/* Group Assignment Section */}
+          {!loadingGroups && groups.length > 0 && (
+            <Card className="mb-6">
+              <CardContent className="pt-6">
+                <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                  <Users className="h-4 w-4 mr-2" />
+                  Assign to Groups (Optional)
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {groups.map(group => (
+                    <div key={group.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`group-${group.id}`}
+                        checked={selectedGroupIds.includes(group.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedGroupIds(prev => [...prev, group.id]);
+                          } else {
+                            setSelectedGroupIds(prev => prev.filter(id => id !== group.id));
+                          }
+                        }}
+                      />
+                      <label htmlFor={`group-${group.id}`} className="text-sm cursor-pointer">
+                        {group.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 gap-6">
             {processed.map((card, index) => (
               <Card key={card.id} className={`${
@@ -331,6 +714,16 @@ export default function EnhancedBulkUploads() {
                         <Camera className="h-5 w-5 text-blue-500 mr-2" />
                       )}
                       {card.status === 'error' ? 'Processing Error' : card.name || 'Unnamed Contact'}
+                      {card.isFromCamera && (
+                        <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                          Camera
+                        </span>
+                      )}
+                      {card.qrCodes && card.qrCodes.length > 0 && (
+                        <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
+                          QR
+                        </span>
+                      )}
                     </CardTitle>
                     {card.status === 'success' && !card.saved && (
                       <div className="flex space-x-2">
@@ -365,55 +758,66 @@ export default function EnhancedBulkUploads() {
                       {card.error}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-sm font-medium text-gray-500">Company</Label>
-                        <p className="mt-1">{card.company || "Not provided"}</p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-gray-500">Email</Label>
-                        <p className="mt-1">{card.email || "Not provided"}</p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-gray-500">Phone Numbers</Label>
-                        <p className="mt-1">
-                          {card.phones && card.phones.length > 0 
-                            ? card.phones.join(", ") 
-                            : "Not provided"}
-                        </p>
-                      </div>
-                      <div>
-                        <Label className="text-sm font-medium text-gray-500">Landlines</Label>
-                        <p className="mt-1">
-                          {card.landlines && card.landlines.length > 0 
-                            ? card.landlines.join(", ") 
-                            : "Not provided"}
-                        </p>
-                      </div>
-                      {card.services && (
-                        <div className="md:col-span-2">
-                          <Label className="text-sm font-medium text-gray-500">Services/Position</Label>
-                          <p className="mt-1">{card.services}</p>
+                    <div className="flex space-x-4">
+                      {card.imageUrl && (
+                        <div className="flex-shrink-0">
+                          <img 
+                            src={card.imageUrl} 
+                            alt="Business card" 
+                            className="w-32 h-20 object-cover rounded-lg shadow-md"
+                          />
                         </div>
                       )}
-                      {card.address && (
-                        <div className="md:col-span-2">
-                          <Label className="text-sm font-medium text-gray-500">Address</Label>
-                          <p className="mt-1">{card.address}</p>
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Company</Label>
+                          <p className="mt-1">{card.company || "Not provided"}</p>
                         </div>
-                      )}
-                      {card.qrCodes && card.qrCodes.length > 0 && (
-                        <div className="md:col-span-2">
-                          <Label className="text-sm font-medium text-gray-500">QR Code Data</Label>
-                          <div className="mt-1 space-y-2">
-                            {card.qrCodes.map((qr, idx) => (
-                              <div key={idx} className="bg-gray-100 p-2 rounded text-sm">
-                                <span className="font-medium capitalize">{qr.type}:</span> {qr.data}
-                              </div>
-                            ))}
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Email</Label>
+                          <p className="mt-1">{card.email || "Not provided"}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Phone Numbers</Label>
+                          <p className="mt-1">
+                            {card.phones && card.phones.length > 0 
+                              ? card.phones.join(", ") 
+                              : "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-500">Landlines</Label>
+                          <p className="mt-1">
+                            {card.landlines && card.landlines.length > 0 
+                              ? card.landlines.join(", ") 
+                              : "Not provided"}
+                          </p>
+                        </div>
+                        {card.services && (
+                          <div className="md:col-span-2">
+                            <Label className="text-sm font-medium text-gray-500">Services/Position</Label>
+                            <p className="mt-1">{card.services}</p>
                           </div>
-                        </div>
-                      )}
+                        )}
+                        {card.address && (
+                          <div className="md:col-span-2">
+                            <Label className="text-sm font-medium text-gray-500">Address</Label>
+                            <p className="mt-1">{card.address}</p>
+                          </div>
+                        )}
+                        {card.qrCodes && card.qrCodes.length > 0 && (
+                          <div className="md:col-span-2">
+                            <Label className="text-sm font-medium text-gray-500">QR Code Data</Label>
+                            <div className="mt-1 space-y-2">
+                              {card.qrCodes.map((qr, idx) => (
+                                <div key={idx} className="bg-purple-100 p-2 rounded text-sm">
+                                  <span className="font-medium capitalize">{qr.type}:</span> {qr.data}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -503,19 +907,53 @@ export default function EnhancedBulkUploads() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="mb-8">
           <div className="flex items-center space-x-3 mb-4">
-            <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
-              <Sparkles className="h-8 w-8 text-white" />
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <Sparkles className="text-white h-6 w-6" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold text-gray-900">AI Business Card Scanner</h2>
-              <p className="text-gray-600">
-                Powered by advanced AI for multi-card detection and QR code extraction
+              <h2 className="text-3xl font-bold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent sm:text-4xl sm:truncate">
+                AI Business Card Scanner
+              </h2>
+              <p className="mt-1 text-lg text-gray-600">
+                Extract data from multiple business cards with advanced AI detection
               </p>
             </div>
           </div>
           
+          {/* AI Features Banner */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+              <Brain className="h-8 w-8 text-blue-600" />
+              <div>
+                <h3 className="font-semibold text-blue-900">AI-Powered</h3>
+                <p className="text-sm text-blue-700">Advanced text recognition</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200">
+              <Camera className="h-8 w-8 text-green-600" />
+              <div>
+                <h3 className="font-semibold text-green-900">Multi-Card Detection</h3>
+                <p className="text-sm text-green-700">Process multiple cards at once</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-purple-50 to-violet-50 p-4 rounded-xl border border-purple-200">
+              <QrCode className="h-8 w-8 text-purple-600" />
+              <div>
+                <h3 className="font-semibold text-purple-900">QR Support</h3>
+                <p className="text-sm text-purple-700">vCard & MeCard detection</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200">
+              <CheckCircle2 className="h-8 w-8 text-amber-600" />
+              <div>
+                <h3 className="font-semibold text-amber-900">Smart Detection</h3>
+                <p className="text-sm text-amber-700">Automatic duplicate check</p>
+              </div>
+            </div>
+          </div>
+          
           {/* Usage Status */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200 mb-6">
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200 mt-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <Zap className="h-5 w-5 text-blue-600" />
@@ -544,139 +982,300 @@ export default function EnhancedBulkUploads() {
           </div>
         </div>
 
-        {/* Upload Options */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* File Upload */}
-          <Card className="group hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
-              <div
-                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-500 transition-colors cursor-pointer group-hover:border-blue-400"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (checkUsageLimit()) {
-                    handleFileSelect(e.dataTransfer.files);
-                  }
-                }}
-                onClick={() => {
-                  if (checkUsageLimit()) {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.multiple = true;
-                    input.accept = 'image/*';
-                    input.onchange = (e) => {
-                      const target = e.target as HTMLInputElement;
-                      handleFileSelect(target.files);
-                    };
-                    input.click();
-                  }
-                }}
-              >
-                <Upload className="mx-auto h-10 w-10 text-blue-500 mb-3" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Upload Images
-                </h3>
-                <p className="text-gray-600 text-sm mb-3">
-                  Drag and drop or click to browse
-                </p>
-                <p className="text-xs text-gray-500">
-                  JPG, PNG, GIF, WebP up to 10MB
-                </p>
+        {/* Upload Zone */}
+        <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 mb-8">
+          <CardContent className="p-0">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <FileImage className="h-6 w-6" />
+                  <h3 className="text-lg font-semibold">Smart Upload Zone</h3>
+                </div>
+                <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
+                  {files.length > 0 ? `${files.length}/10 files` : 'Ready'}
+                </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Camera Capture */}
-          <Card className="group hover:shadow-lg transition-all duration-300">
-            <CardContent className="p-6">
-              <div
-                className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-green-500 transition-colors cursor-pointer group-hover:border-green-400"
-                onClick={() => {
-                  if (checkUsageLimit()) {
-                    setShowCamera(true);
-                  }
-                }}
-              >
-                <Smartphone className="mx-auto h-10 w-10 text-green-500 mb-3" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Use Camera
-                </h3>
-                <p className="text-gray-600 text-sm mb-3">
-                  Capture cards directly with camera
-                </p>
-                <p className="text-xs text-gray-500">
-                  Up to 10 cards per session
-                </p>
+            </div>
+            
+            {/* Upload Area */}
+            <div 
+              className="p-8 border-2 border-dashed border-purple-200 m-6 rounded-2xl hover:border-purple-400 transition-all duration-300 hover:bg-purple-50/50"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (checkUsageLimit()) {
+                  handleFileSelect(e.dataTransfer.files);
+                }
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-20 h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mb-6">
+                  <CloudUpload className="text-purple-600 h-10 w-10" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Drop Your Business Cards Here</h3>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                  <Button 
+                    onClick={() => {
+                      if (checkUsageLimit()) {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.multiple = true;
+                        input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                        input.onchange = (e) => {
+                          const files = (e.target as HTMLInputElement).files;
+                          if (files) handleFileSelect(files);
+                        };
+                        input.click();
+                      }
+                    }}
+                    disabled={processing}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50"
+                  >
+                    <CloudUpload className="h-5 w-5 mr-2" />
+                    {processing ? 'Processing...' : 'Choose Files'}
+                  </Button>
+                  
+                  <Dialog open={showCamera} onOpenChange={setShowCamera}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (checkUsageLimit()) {
+                            setShowCamera(true);
+                            startCamera();
+                          }
+                        }}
+                        disabled={processing}
+                        className="border-purple-300 text-purple-600 hover:bg-purple-50 px-8 py-3 rounded-xl font-semibold"
+                      >
+                        <Camera className="h-5 w-5 mr-2" />
+                        Use Camera
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[900px] max-h-[90vh]">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center space-x-2">
+                          <Camera className="h-5 w-5" />
+                          <span>Capture Business Cards</span>
+                          {pendingCaptures.length > 0 && (
+                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                              {pendingCaptures.length} captured
+                            </span>
+                          )}
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        {cameraError ? (
+                          <div className="text-center py-12">
+                            <CameraOff className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                            <p className="text-red-600 mb-4">{cameraError}</p>
+                            <Button onClick={startCamera} variant="outline">
+                              <RotateCcw className="h-4 w-4 mr-2" />
+                              Try Again
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="relative bg-black rounded-lg overflow-hidden">
+                              <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-96 object-cover"
+                              />
+                              {/* Camera overlay */}
+                              <div className="absolute inset-0 pointer-events-none">
+                                <div className="absolute inset-4 border-2 border-white/50 rounded-lg">
+                                  <ScanLine className="absolute top-2 left-2 h-6 w-6 text-white/75" />
+                                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-white/75 text-sm font-medium">
+                                    Position card within frame ({captureCount}/10)
+                                  </div>
+                                  {pendingCaptures.length > 0 && (
+                                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs">
+                                      {pendingCaptures.length} card{pendingCaptures.length > 1 ? 's' : ''} ready to process
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Pending captures preview */}
+                            {pendingCaptures.length > 0 && (
+                              <div className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="text-sm font-medium text-gray-900 mb-3">Captured Photos ({pendingCaptures.length})</h4>
+                                <div className="flex space-x-2 overflow-x-auto">
+                                  {pendingCaptures.map((capture, index) => (
+                                    <div key={capture.id} className="flex-shrink-0 relative">
+                                      <div className="w-16 h-10 bg-gray-200 rounded border-2 border-green-300 flex items-center justify-center">
+                                        <Camera className="h-4 w-4 text-green-600" />
+                                      </div>
+                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                        {index + 1}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {cameraMode === 'capture' ? (
+                              <div className="flex justify-center space-x-4">
+                                <Button
+                                  onClick={switchCamera}
+                                  variant="outline"
+                                  size="sm"
+                                >
+                                  <RotateCcw className="h-4 w-4 mr-2" />
+                                  Switch Camera
+                                </Button>
+                                <Button
+                                  onClick={capturePhoto}
+                                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 px-8"
+                                  disabled={!cameraStream || captureCount >= 10}
+                                >
+                                  <Camera className="h-4 w-4 mr-2" />
+                                  Capture ({captureCount}/10)
+                                </Button>
+                                {pendingCaptures.length > 0 && (
+                                  <>
+                                    <Button
+                                      onClick={processAllCaptures}
+                                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-6"
+                                    >
+                                      <ArrowRight className="h-4 w-4 mr-2" />
+                                      Process All ({pendingCaptures.length})
+                                    </Button>
+                                    <Button
+                                      onClick={clearCaptures}
+                                      variant="outline"
+                                      size="sm"
+                                    >
+                                      Clear
+                                    </Button>
+                                  </>
+                                )}
+                                <Button
+                                  onClick={stopCamera}
+                                  variant="outline"
+                                  size="sm"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing Captures</h3>
+                                <p className="text-gray-600">Please wait while we extract contact information...</p>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-gray-500">Or drag and drop files</p>
+                  <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB each • Max 10 files</p>
+                  <p className="text-xs text-purple-600 mt-1 flex items-center justify-center">
+                    <QrCode className="h-3 w-3 mr-1" />
+                    QR codes automatically detected
+                  </p>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Selected Files */}
         {files.length > 0 && (
-          <Card className="mb-8">
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
-                Selected Files ({files.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {files.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center">
-                      <Camera className="h-4 w-4 text-gray-500 mr-2" />
-                      <span className="text-sm font-medium">{file.name}</span>
-                      <span className="text-xs text-gray-500 ml-2">
-                        ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFile(index)}
-                      disabled={processing}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+          <Card className="mb-8 border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardContent className="p-0">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="h-6 w-6" />
+                    <h3 className="text-lg font-semibold">Selected Files ({files.length})</h3>
                   </div>
-                ))}
+                  <div className="text-sm opacity-90">
+                    Ready for processing
+                  </div>
+                </div>
               </div>
-              <div className="mt-6">
-                <Button
-                  onClick={processFiles}
-                  disabled={processing || files.length === 0}
-                  className="w-full"
-                >
-                  {processing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processing {currentFile}...
-                    </>
-                  ) : (
-                    <>
-                      <Camera className="h-4 w-4 mr-2" />
-                      Process {files.length} Image{files.length !== 1 ? 's' : ''}
-                    </>
+              
+              <div className="p-6">
+                <div className="space-y-2">
+                  {files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center">
+                        <Camera className="h-4 w-4 text-gray-500 mr-2" />
+                        <span className="text-sm font-medium">{file.name}</span>
+                        <span className="text-xs text-gray-500 ml-2">
+                          ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                        </span>
+                        {file.name.includes('camera-capture') && (
+                          <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                            Camera
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        disabled={processing}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="mt-6">
+                  <Button
+                    onClick={processFiles}
+                    disabled={processing || files.length === 0}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 text-lg font-semibold"
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        Processing {currentFile}...
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="h-5 w-5 mr-2" />
+                        Process {files.length} Image{files.length !== 1 ? 's' : ''} with AI
+                      </>
+                    )}
+                  </Button>
+                  
+                  {processing && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                        <span>Processing progress</span>
+                        <span>{Math.round(progress)}% complete</span>
+                      </div>
+                      <Progress value={progress} className="w-full h-3" />
+                      <p className="text-sm text-gray-500 mt-2 text-center">
+                        {currentFile && `Currently processing: ${currentFile}`}
+                      </p>
+                    </div>
                   )}
-                </Button>
-                {processing && (
-                  <div className="mt-4">
-                    <Progress value={progress} className="w-full" />
-                    <p className="text-sm text-gray-600 mt-2 text-center">
-                      {Math.round(progress)}% complete
-                    </p>
-                  </div>
-                )}
+                </div>
               </div>
             </CardContent>
           </Card>
         )}
 
         {/* Features Info */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="group hover:shadow-lg transition-all duration-300">
+        {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
             <CardContent className="p-6 text-center">
               <div className="p-3 bg-blue-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
                 <Camera className="h-10 w-10 text-blue-600" />
@@ -688,7 +1287,7 @@ export default function EnhancedBulkUploads() {
             </CardContent>
           </Card>
           
-          <Card className="group hover:shadow-lg transition-all duration-300">
+          <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
             <CardContent className="p-6 text-center">
               <div className="p-3 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-green-200 transition-colors">
                 <Eye className="h-10 w-10 text-green-600" />
@@ -700,7 +1299,7 @@ export default function EnhancedBulkUploads() {
             </CardContent>
           </Card>
           
-          <Card className="group hover:shadow-lg transition-all duration-300">
+          <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
             <CardContent className="p-6 text-center">
               <div className="p-3 bg-purple-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
                 <Users className="h-10 w-10 text-purple-600" />
@@ -711,15 +1310,7 @@ export default function EnhancedBulkUploads() {
               </p>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Camera Capture Modal */}
-        <CameraCapture
-          isOpen={showCamera}
-          onClose={() => setShowCamera(false)}
-          onCapture={handleCameraCapture}
-          maxImages={10}
-        />
+        </div> */}
 
         {/* Usage Limit Modal */}
         <UsageLimitModal
@@ -729,6 +1320,9 @@ export default function EnhancedBulkUploads() {
           currentCount={usage.aiScansCount}
           limit={limits.aiScans}
         />
+
+        {/* Hidden canvas for camera capture */}
+        <canvas ref={canvasRef} className="hidden" />
       </div>
     </div>
   );

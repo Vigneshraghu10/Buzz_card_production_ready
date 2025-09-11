@@ -29,7 +29,7 @@ const pricingPlans: PricingPlan[] = [
   {
     id: "basic",
     name: "Basic Plan",
-    price: 2999,
+    price: 999,
     period: "year",
     description: "Perfect for small businesses and individual professionals",
     features: [
@@ -45,7 +45,7 @@ const pricingPlans: PricingPlan[] = [
   {
     id: "premium",
     name: "Premium Plan",
-    price: 4999,
+    price: 1999,
     period: "year",
     description: "Advanced features for growing businesses",
     features: [

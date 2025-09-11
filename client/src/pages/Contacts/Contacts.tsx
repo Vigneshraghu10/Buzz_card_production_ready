@@ -3,7 +3,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { isDuplicateContact } from "../../utils/duplicate";
-import { useUsageLimits } from "../../hooks/useUsageLimits";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -13,8 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 import { Badge } from "../../components/ui/badge";
 import { useToast } from "../../hooks/use-toast";
-import UsageLimitModal from "../../components/UsageLimitModal";
-import { Plus, Search, Grid3X3, List, MoreVertical, Edit, Trash2, Users2, Loader2, Download, Check, FileText, Copy, Upload, FileDown, Phone, Mail, MapPin, Building, User } from "lucide-react";
+import { Plus, Search, Grid3X3, List, MoreVertical, Edit, Trash2, Users2, Loader2, Download, Check, FileText, Copy, Upload, FileDown, Phone, MapPin, ExternalLink } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "../../components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import * as XLSX from 'xlsx';
@@ -35,6 +33,7 @@ interface Contact {
   company: string;
   services: string;
   address?: string;
+  qrCodeUrl?: string; // Added QR Code URL field
   groupIds: string[];
   createdAt: Date;
   ownerId: string;
@@ -57,7 +56,6 @@ interface Template {
 function Contacts() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { usage, limits, canAddContact, refreshUsage } = useUsageLimits();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -75,7 +73,6 @@ function Contacts() {
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [showLimitModal, setShowLimitModal] = useState(false);
   const [selectedContactForGroup, setSelectedContactForGroup] = useState<Contact | null>(null);
   const [selectedContactForMessage, setSelectedContactForMessage] = useState<Contact | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
@@ -90,6 +87,7 @@ function Contacts() {
     company: string;
     services: string;
     address: string;
+    qrCodeUrl: string; // Added QR Code URL field
     groupIds: string[];
   }>({
     firstName: "",
@@ -99,6 +97,7 @@ function Contacts() {
     company: "",
     services: "",
     address: "",
+    qrCodeUrl: "", // Added QR Code URL field
     groupIds: [],
   });
 
@@ -160,7 +159,7 @@ function Contacts() {
       );
       const contactsSnapshot = await getDocs(contactsQuery);
       const contactsData = contactsSnapshot.docs.map(doc => {
-        const data = doc.data() as any; // Use any to handle old and new data structures
+        const data = doc.data() as any;
         const contact: Contact = {
           id: doc.id,
           firstName: data.firstName || "",
@@ -170,6 +169,7 @@ function Contacts() {
           company: data.company || "",
           services: data.services || "",
           address: data.address || "",
+          qrCodeUrl: data.qrCodeUrl || "", // Added QR Code URL field
           groupIds: data.groupIds || [],
           createdAt: data.createdAt?.toDate() || new Date(),
           ownerId: data.ownerId,
@@ -223,7 +223,7 @@ function Contacts() {
     }
   };
 
-  // Bulk Import Function
+  // Enhanced Bulk Import Function with QR Code URL support
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -247,6 +247,7 @@ function Contacts() {
           const phone2 = row['Phone 2'] || row['phone2'] || row['Secondary Phone'] || '';
           const email = row['Email'] || row['email'] || row['Email Address'] || '';
           const company = row['Company'] || row['company'] || row['Organization'] || '';
+          const qrCodeUrl = row['QR Code URL'] || row['qrCodeUrl'] || row['QR Code'] || row['URL'] || ''; // Added QR Code URL extraction
           
           const phones = [phone, phone2].filter(p => p).map(p => p.toString().trim());
 
@@ -259,6 +260,7 @@ function Contacts() {
             company: company.toString().trim(),
             services: row['Services'] || row['services'] || '',
             address: row['Address'] || row['address'] || '',
+            qrCodeUrl: qrCodeUrl.toString().trim(), // Added QR Code URL field
             isValid: !!(firstName && phones.length > 0) // Minimum required fields
           };
         }).filter(row => row.firstName || (row.phones && row.phones.length > 0)); // Filter out completely empty rows
@@ -305,6 +307,7 @@ function Contacts() {
             company: contact.company,
             services: contact.services || '',
             address: contact.address || '',
+            qrCodeUrl: contact.qrCodeUrl || '', // Added QR Code URL field
             groupIds: [],
             ownerId: user.uid,
             createdAt: serverTimestamp(),
@@ -341,7 +344,7 @@ function Contacts() {
     }
   };
 
-  // Excel Export Function
+  // Enhanced Excel Export Function with QR Code URL
   const handleExportToExcel = async () => {
     try {
       setExporting(true);
@@ -370,6 +373,7 @@ function Contacts() {
           'Company': contact.company || '',
           'Services': contact.services || '',
           'Address': contact.address || '',
+          'QR Code URL': contact.qrCodeUrl || '', // Added QR Code URL field
           'Groups': groupNames,
           'Created Date': contact.createdAt ? contact.createdAt.toLocaleDateString() : '',
           'Created Time': contact.createdAt ? contact.createdAt.toLocaleTimeString() : '',
@@ -381,7 +385,7 @@ function Contacts() {
 
       const colWidths = [
         { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 30 },
-        { wch: 20 }, { wch: 30 }, { wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
+        { wch: 20 }, { wch: 30 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
       ];
       ws['!cols'] = colWidths;
 
@@ -410,7 +414,7 @@ function Contacts() {
     }
   };
 
-  // VCF Export Function
+  // Enhanced VCF Export Function with QR Code URL
   const generateVCF = (contact: Contact) => {
     const vcf = [
       'BEGIN:VCARD',
@@ -422,6 +426,7 @@ function Contacts() {
       contact.company ? `ORG:${contact.company}` : '',
       contact.address ? `ADR;TYPE=WORK:;;${contact.address};;;;` : '',
       contact.services ? `NOTE:Services: ${contact.services}` : '',
+      contact.qrCodeUrl ? `URL:${contact.qrCodeUrl}` : '', // Added QR Code URL to VCF
       'END:VCARD'
     ].filter(Boolean).join('\n');
 
@@ -494,13 +499,6 @@ function Contacts() {
         setShowEditModal(false);
         setEditingContact(null);
       } else {
-        // Check usage limits for new contacts
-        if (!canAddContact) {
-          setShowLimitModal(true);
-          setSaving(false);
-          return;
-        }
-
         if (formData.email || formData.phones.length > 0) {
           try {
             const isDupe = await isDuplicateContact(user.uid, formData.email, formData.phones);
@@ -526,6 +524,7 @@ function Contacts() {
           company: formData.company.trim(),
           services: formData.services.trim(),
           address: formData.address.trim(),
+          qrCodeUrl: formData.qrCodeUrl.trim(), // Added QR Code URL field
           groupIds: formData.groupIds || [],
           ownerId: user.uid,
           createdAt: serverTimestamp(),
@@ -539,9 +538,6 @@ function Contacts() {
           description: "Contact added successfully",
         });
         
-        // Refresh usage after adding contact
-        await refreshUsage();
-        
         setShowAddModal(false);
       }
 
@@ -553,6 +549,7 @@ function Contacts() {
         company: "",
         services: "",
         address: "",
+        qrCodeUrl: "", // Added QR Code URL field
         groupIds: [],
       });
       
@@ -579,6 +576,7 @@ function Contacts() {
       company: contact.company || "",
       services: contact.services || "",
       address: contact.address || "",
+      qrCodeUrl: contact.qrCodeUrl || "", // Added QR Code URL field
       groupIds: contact.groupIds || [],
     });
     setShowEditModal(true);
@@ -670,15 +668,13 @@ function Contacts() {
 
   // Enhanced function to clean and format message for WhatsApp URL
   const formatMessageForWhatsApp = (message: string) => {
-    // Clean the message by removing extra spaces and fixing line breaks
     let cleanMessage = message
       .trim()
-      .replace(/\n\s*\n\s*\n/g, '\n\n') // Replace multiple line breaks with double line breaks
-      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-      .replace(/\n /g, '\n') // Remove spaces after line breaks
-      .replace(/ \n/g, '\n'); // Remove spaces before line breaks
+      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .replace(/\s+/g, ' ')
+      .replace(/\n /g, '\n')
+      .replace(/ \n/g, '\n');
 
-    // Limit message length to avoid URL length issues (WhatsApp URL limit ~2000 chars)
     if (cleanMessage.length > 1500) {
       cleanMessage = cleanMessage.substring(0, 1500) + '...';
     }
@@ -687,132 +683,127 @@ function Contacts() {
   };
 
   // Copy message to clipboard function
-const copyMessageToClipboard = async (message: string) => {
-  try {
-    await navigator.clipboard.writeText(message);
-    toast({
-      title: "Copied!",
-      description: "Message copied to clipboard. You can paste it in WhatsApp manually.",
-    });
-  } catch (error) {
-    console.error("Failed to copy message:", error);
-    toast({
-      title: "Copy Failed",
-      description: "Unable to copy message to clipboard",
-      variant: "destructive",
-    });
-  }
-};
+  const copyMessageToClipboard = async (message: string) => {
+    try {
+      await navigator.clipboard.writeText(message);
+      toast({
+        title: "Copied!",
+        description: "Message copied to clipboard. You can paste it in WhatsApp manually.",
+      });
+    } catch (error) {
+      console.error("Failed to copy message:", error);
+      toast({
+        title: "Copy Failed",
+        description: "Unable to copy message to clipboard",
+        variant: "destructive",
+      });
+    }
+  };
 
-// Utility: Format phone number for WhatsApp
-const formatPhoneNumber = (rawNumber: string): string => {
-  if (!rawNumber) return "";
+  // Utility: Format phone number for WhatsApp
+  const formatPhoneNumber = (rawNumber: string): string => {
+    if (!rawNumber) return "";
 
-  let cleaned = rawNumber.replace(/[^\d]/g, ""); // keep only digits
-  cleaned = cleaned.replace(/^0+/, ""); // remove leading zeros
+    let cleaned = rawNumber.replace(/[^\d]/g, "");
+    cleaned = cleaned.replace(/^0+/, "");
 
-  // Add default country code (India "91" here — change if global)
-  if (!cleaned.startsWith("91") && cleaned.length <= 10) {
-    cleaned = "91" + cleaned;
-  }
-
-  return cleaned;
-};
-
-// Function to send WhatsApp message
-const handleSendWhatsAppMessage = () => {
-  if (!selectedContactForMessage) return;
-
-  const phoneNumber = formatPhoneNumber(selectedContactForMessage.phones?.[0] || "");
-  if (!phoneNumber) {
-    toast({
-      title: "Error",
-      description: "No phone number available for this contact",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  let messageContent = "";
-
-  if (selectedTemplate) {
-    messageContent = replacePlaceholders(
-      selectedTemplate.content,
-      selectedContactForMessage
-    );
-  } else if (customMessage.trim()) {
-    messageContent = replacePlaceholders(
-      customMessage,
-      selectedContactForMessage
-    );
-  } else {
-    messageContent = `Hi ${selectedContactForMessage.firstName}, I hope you're doing well!`;
-  }
-
-  const formattedMessage = formatMessageForWhatsApp(messageContent);
-
-  try {
-    const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(
-      navigator.userAgent
-    );
-
-    let whatsappUrl: string;
-
-    if (isMobile) {
-      // ✅ Try to open WhatsApp mobile app
-      whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(
-        formattedMessage
-      )}`;
-
-      // Fallback → if app not installed, use wa.me
-      setTimeout(() => {
-        window.open(
-          `https://wa.me/${phoneNumber}?text=${encodeURIComponent(
-            formattedMessage
-          )}`,
-          "_blank"
-        );
-      }, 500);
-    } else {
-      // ✅ Desktop → WhatsApp Web
-      whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(
-        formattedMessage
-      )}`;
+    if (!cleaned.startsWith("91") && cleaned.length <= 10) {
+      cleaned = "91" + cleaned;
     }
 
-    // Handle too long messages
-    if (whatsappUrl.length > 2000) {
+    return cleaned;
+  };
+
+  // Enhanced WhatsApp messaging function supporting both web and mobile
+  const handleSendWhatsAppMessage = () => {
+    if (!selectedContactForMessage) return;
+
+    const phoneNumber = formatPhoneNumber(selectedContactForMessage.phones?.[0] || "");
+    if (!phoneNumber) {
+      toast({
+        title: "Error",
+        description: "No phone number available for this contact",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let messageContent = "";
+
+    if (selectedTemplate) {
+      messageContent = replacePlaceholders(
+        selectedTemplate.content,
+        selectedContactForMessage
+      );
+    } else if (customMessage.trim()) {
+      messageContent = replacePlaceholders(
+        customMessage,
+        selectedContactForMessage
+      );
+    } else {
+      messageContent = `Hi ${selectedContactForMessage.firstName}, I hope you're doing well!`;
+    }
+
+    const formattedMessage = formatMessageForWhatsApp(messageContent);
+
+    try {
+      // Enhanced mobile detection
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
+      const isTablet = /iPad/i.test(navigator.userAgent);
+      
+      let whatsappUrl: string;
+      let fallbackUrl: string;
+
+      if (isMobile && !isTablet) {
+        // Mobile device - try to open WhatsApp app first
+        whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
+        fallbackUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(formattedMessage)}`;
+        
+        // Try app first, then fallback to web
+        const openAppTimeout = setTimeout(() => {
+          window.open(fallbackUrl, "_blank");
+        }, 1000);
+
+        window.location.href = whatsappUrl;
+        
+        // Clear timeout if app opens successfully
+        window.addEventListener('blur', () => {
+          clearTimeout(openAppTimeout);
+        });
+
+      } else {
+        // Desktop/Tablet - use WhatsApp Web
+        whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
+        
+        if (whatsappUrl.length > 2000) {
+          // Message too long for URL
+          copyMessageToClipboard(formattedMessage);
+          window.open(`https://web.whatsapp.com/send?phone=${phoneNumber}`, "_blank");
+          toast({
+            title: "Message Too Long",
+            description: "Message copied to clipboard. Please paste it manually in WhatsApp.",
+          });
+        } else {
+          window.open(whatsappUrl, "_blank");
+          toast({
+            title: "Success",
+            description: `Opening WhatsApp Web to send message to ${selectedContactForMessage.firstName}`,
+          });
+        }
+      }
+
+    } catch (error) {
+      console.error("Error opening WhatsApp:", error);
       copyMessageToClipboard(formattedMessage);
-
-      const simpleUrl = isMobile
-        ? `https://wa.me/${phoneNumber}`
-        : `https://web.whatsapp.com/send?phone=${phoneNumber}`;
-
-      window.open(simpleUrl, "_blank");
       toast({
-        title: "Message Too Long",
-        description:
-          "Message copied to clipboard. Please paste it manually in WhatsApp.",
-      });
-    } else {
-      window.open(whatsappUrl, "_blank");
-      toast({
-        title: "Success",
-        description: `Opening WhatsApp to send message to ${selectedContactForMessage.firstName}`,
+        title: "Error",
+        description: "Failed to open WhatsApp. Message copied to clipboard.",
+        variant: "destructive",
       });
     }
-  } catch (error) {
-    console.error("Error opening WhatsApp:", error);
-    copyMessageToClipboard(formattedMessage);
-  }
 
-  setShowTemplateModal(false);
-};
-
-
-
-
-
+    setShowTemplateModal(false);
+  };
 
   const getGroupName = (groupId: string) => {
     const group = groups.find(g => g.id === groupId);
@@ -845,6 +836,7 @@ const handleSendWhatsAppMessage = () => {
       company: "",
       services: "",
       address: "",
+      qrCodeUrl: "", // Added QR Code URL field
       groupIds: [],
     });
     setShowAddModal(true);
@@ -862,6 +854,7 @@ const handleSendWhatsAppMessage = () => {
       company: "",
       services: "",
       address: "",
+      qrCodeUrl: "", // Added QR Code URL field
       groupIds: [],
     });
   };
@@ -896,55 +889,35 @@ const handleSendWhatsAppMessage = () => {
     );
   }
 
-  // Grid View Component
+  // Enhanced Responsive Grid View Component
   const GridView = () => (
-    <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {filteredContacts.map((contact) => (
-        <Card key={contact.id} className="hover:shadow-md transition-shadow relative">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-primary font-medium">
+        <Card key={contact.id} className="hover:shadow-lg transition-all duration-200 relative flex flex-col">
+          <CardContent className="p-4 flex-1 flex flex-col">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-start space-x-3 flex-1 min-w-0">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <span className="text-primary font-medium text-sm">
                     {getInitials(contact.firstName, contact.lastName)}
                   </span>
                 </div>
-                <div className="flex-1 min-w-0 space-y-1">
-                  <h3 className="text-lg font-medium text-gray-900 truncate">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base font-semibold text-gray-900 truncate leading-tight">
                     {contact.firstName} {contact.lastName}
                   </h3>
-                  {contact.company && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Building className="h-3 w-3 mr-1 flex-shrink-0" />
-                      <span className="truncate">{contact.company}</span>
-                    </div>
-                  )}
-                  {contact.phones && contact.phones.length > 0 && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
-                      <span className="truncate">{contact.phones[0]}</span>
-                      {contact.phones.length > 1 && (
-                        <span className="ml-1 text-xs bg-gray-200 px-1 rounded">+{contact.phones.length - 1}</span>
-                      )}
-                    </div>
-                  )}
-                  {contact.email && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
-                      <span className="truncate">{contact.email}</span>
-                    </div>
-                  )}
+                  <p className="text-sm text-gray-600 truncate mt-0.5">{contact.company}</p>
                 </div>
               </div>
               
-              <div className="absolute top-4 right-4">
+              <div className="ml-2 flex-shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
+                    <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-gray-100">
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
+                  <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuItem onClick={() => window.open(`tel:${contact.phones?.[0]}`)}>
                       <Phone className="h-4 w-4 mr-2" />
                       Call
@@ -953,6 +926,12 @@ const handleSendWhatsAppMessage = () => {
                       <Users2 className="h-4 w-4 mr-2" />
                       Assign Groups
                     </DropdownMenuItem>
+                    {contact.qrCodeUrl && (
+                      <DropdownMenuItem onClick={() => window.open(contact.qrCodeUrl, '_blank')}>
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open QR Link
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onClick={() => handleExportVCF(contact)}>
                       <FileDown className="h-4 w-4 mr-2" />
                       Export VCF
@@ -960,7 +939,7 @@ const handleSendWhatsAppMessage = () => {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem 
                       onClick={() => handleDeleteContact(contact.id)}
-                      className="text-red-600"
+                      className="text-red-600 focus:text-red-600"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
@@ -969,55 +948,94 @@ const handleSendWhatsAppMessage = () => {
                 </DropdownMenu>
               </div>
             </div>
+            
+            {/* Contact Details */}
+            <div className="space-y-1.5 mb-3 flex-1">
+              {contact.phones?.slice(0, 2).map((phone, i) => (
+                <p key={i} className="text-sm text-gray-600 flex items-center">
+                  <Phone className="h-3 w-3 mr-1.5 text-gray-400 flex-shrink-0" />
+                  <span className="truncate">{phone}</span>
+                </p>
+              ))}
+              {contact.phones && contact.phones.length > 2 && (
+                <p className="text-xs text-gray-500">+{contact.phones.length - 2} more numbers</p>
+              )}
+              
+              {contact.email && (
+                <p className="text-sm text-gray-600 truncate">{contact.email}</p>
+              )}
+              
+              {contact.address && (
+                <p className="text-sm text-gray-600 flex items-start">
+                  <MapPin className="h-3 w-3 mr-1.5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <span className="text-xs line-clamp-2">{contact.address}</span>
+                </p>
+              )}
+              
+              {contact.qrCodeUrl && (
+                <div className="flex items-center">
+                  <ExternalLink className="h-3 w-3 mr-1.5 text-blue-500 flex-shrink-0" />
+                  <button 
+                    onClick={() => window.open(contact.qrCodeUrl, '_blank')}
+                    className="text-xs text-blue-600 hover:text-blue-800 underline truncate"
+                  >
+                    View QR Link
+                  </button>
+                </div>
+              )}
+            </div>
+
             {contact.services && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-start space-x-2">
-                  <User className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-gray-700 line-clamp-2">{contact.services}</p>
-                </div>
+              <div className="mb-3">
+                <p className="text-xs text-gray-600 line-clamp-2 bg-gray-50 p-2 rounded text-left">
+                  {contact.services}
+                </p>
               </div>
             )}
-            {contact.address && (
-              <div className="mt-3">
-                <div className="flex items-start space-x-2">
-                  <MapPin className="h-3 w-3 text-red-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-gray-600 line-clamp-2">{contact.address}</p>
-                </div>
-              </div>
-            )}
-            <div className="mt-4 flex justify-between items-center">
+            
+            {/* Groups */}
+            <div className="mb-3">
               <div className="flex flex-wrap gap-1">
-                {contact.groupIds?.slice(0, 3).map((groupId, index) => (
+                {contact.groupIds?.slice(0, 2).map((groupId, index) => (
                   <Badge 
                     key={groupId} 
                     variant="secondary" 
-                    className={`text-xs ${getBadgeColor(index)}`}
+                    className={`text-xs px-2 py-0.5 ${getBadgeColor(index)}`}
                   >
                     {getGroupName(groupId)}
                   </Badge>
                 ))}
-                {contact.groupIds && contact.groupIds.length > 3 && (
-                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-800">
-                    +{contact.groupIds.length - 3}
+                {contact.groupIds && contact.groupIds.length > 2 && (
+                  <Badge variant="secondary" className="text-xs px-2 py-0.5 bg-gray-100 text-gray-800">
+                    +{contact.groupIds.length - 2}
                   </Badge>
                 )}
+                {(!contact.groupIds || contact.groupIds.length === 0) && (
+                  <span className="text-xs text-gray-400">No groups</span>
+                )}
               </div>
-              <div className="flex items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSendMessage(contact)}
-                >
-                  <WhatsAppIcon className="h-4 w-4 text-green-600" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleEditContact(contact)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSendMessage(contact)}
+                className="flex-1 mr-1 h-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+              >
+                <WhatsAppIcon className="h-4 w-4 mr-1" />
+                <span className="text-xs">WhatsApp</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleEditContact(contact)}
+                className="flex-1 ml-1 h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+              >
+                <Edit className="h-4 w-4 mr-1" />
+                <span className="text-xs">Edit</span>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -1025,7 +1043,7 @@ const handleSendWhatsAppMessage = () => {
     </div>
   );
 
-  // Table View Component
+  // Enhanced Table View Component with Serial Number
   const TableView = () => (
     <div className="mt-6">
       <Card>
@@ -1033,34 +1051,75 @@ const handleSendWhatsAppMessage = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">S.No</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Company</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>QR Code</TableHead>
                 <TableHead>Groups</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredContacts.map((contact) => (
+              {filteredContacts.map((contact, index) => (
                 <TableRow key={contact.id}>
+                  <TableCell className="font-medium text-gray-500">
+                    {index + 1}
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                         <span className="text-primary text-sm font-medium">
                           {getInitials(contact.firstName, contact.lastName)}
                         </span>
                       </div>
-                      <span className="font-medium">
+                      <span className="font-medium min-w-0">
                         {contact.firstName} {contact.lastName}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    {contact.phones?.join(', ')}
+                    <div className="space-y-1">
+                      {contact.phones?.map((phone, i) => (
+                        <div key={i} className="text-sm">
+                          {phone}
+                        </div>
+                      ))}
+                    </div>
                   </TableCell>
-                  <TableCell className="max-w-xs truncate">{contact.email}</TableCell>
-                  <TableCell className="max-w-xs truncate">{contact.company}</TableCell>
+                  <TableCell className="max-w-xs">
+                    <div className="truncate" title={contact.email}>
+                      {contact.email}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-xs">
+                    <div className="truncate" title={contact.company}>
+                      {contact.company}
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-xs">
+                    {contact.address && (
+                      <div className="truncate" title={contact.address}>
+                        {contact.address}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {contact.qrCodeUrl ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.open(contact.qrCodeUrl, '_blank')}
+                        className="text-blue-600 hover:text-blue-700"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <span className="text-gray-400 text-sm">-</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {contact.groupIds && contact.groupIds.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
@@ -1084,11 +1143,13 @@ const handleSendWhatsAppMessage = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleSendMessage(contact)}
+                        className="h-8 w-8 p-0"
+                        title="Send WhatsApp Message"
                       >
                         <WhatsAppIcon className="h-4 w-4 text-green-600" />
                       </Button>
@@ -1096,6 +1157,8 @@ const handleSendWhatsAppMessage = () => {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleEditContact(contact)}
+                        className="h-8 w-8 p-0"
+                        title="Edit Contact"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -1116,13 +1179,19 @@ const handleSendWhatsAppMessage = () => {
                             onClick={() => handleAssignToGroup(contact)}
                           >
                             <Users2 className="h-4 w-4 mr-2" />
-                          Assign Groups
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleExportVCF(contact)}>
-                          <FileDown className="h-4 w-4 mr-2" />
-                          Export VCF
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                            Assign Groups
+                          </DropdownMenuItem>
+                          {contact.qrCodeUrl && (
+                            <DropdownMenuItem onClick={() => window.open(contact.qrCodeUrl, '_blank')}>
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Open QR Link
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => handleExportVCF(contact)}>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            Export VCF
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleDeleteContact(contact.id)}
                             className="text-red-600"
@@ -1184,24 +1253,16 @@ const handleSendWhatsAppMessage = () => {
               )}
             </Button>
 
-            <Button onClick={() => {
-              if (!canAddContact) {
-                setShowLimitModal(true);
-                return;
-              }
-              handleOpenAddModal();
-            }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Contact
-            </Button>
-            
             <Dialog open={showAddModal || showEditModal} onOpenChange={(open) => {
               if (!open) {
                 handleCloseModal();
               }
             }}>
               <DialogTrigger asChild>
-                <div style={{ display: 'none' }} />
+                <Button onClick={handleOpenAddModal}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Contact
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -1310,6 +1371,17 @@ const handleSendWhatsAppMessage = () => {
                       value={formData.address}
                       onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                       rows={2}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="qrCodeUrl">QR Code URL (Optional)</Label>
+                    <Input
+                      id="qrCodeUrl"
+                      type="url"
+                      value={formData.qrCodeUrl}
+                      onChange={(e) => setFormData(prev => ({ ...prev, qrCodeUrl: e.target.value }))}
+                      placeholder="https://example.com/qr-code"
                       disabled={saving}
                     />
                   </div>
@@ -1439,9 +1511,9 @@ const handleSendWhatsAppMessage = () => {
         )}
       </div>
 
-      {/* Bulk Import Modal */}
+      {/* Enhanced Bulk Import Modal with QR Code URL support */}
       <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Bulk Import Contacts</DialogTitle>
           </DialogHeader>
@@ -1451,8 +1523,8 @@ const handleSendWhatsAppMessage = () => {
               <ul className="text-sm text-blue-700 space-y-1">
                 <li>• Upload an Excel file (.xlsx) with contact information</li>
                 <li>• Required columns: <strong>First Name</strong> and <strong>Phone</strong></li>
-                <li>• Optional columns: Last Name, Email, Company, Services, Address</li>
-                <li>• Alternative column names are supported (e.g., 'Name', 'Mobile', 'Organization')</li>
+                <li>• Optional columns: Last Name, Email, Company, Services, Address, <strong>QR Code URL</strong></li>
+                <li>• Alternative column names are supported (e.g., 'Name', 'Mobile', 'Organization', 'URL')</li>
                 <li>• Duplicates will be automatically skipped</li>
               </ul>
             </div>
@@ -1460,7 +1532,6 @@ const handleSendWhatsAppMessage = () => {
             <div>
               <Label htmlFor="importFile">Select Excel File</Label>
               <Input
-
                 id="importFile"
                 name="importFile"
                 type="file"
@@ -1491,6 +1562,7 @@ const handleSendWhatsAppMessage = () => {
                         <TableHead>Phone 2</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Company</TableHead>
+                        <TableHead>QR Code URL</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1505,10 +1577,17 @@ const handleSendWhatsAppMessage = () => {
                           </TableCell>
                           <TableCell>{row.firstName}</TableCell>
                           <TableCell>{row.lastName}</TableCell>
-                          <TableCell>{row.phone}</TableCell>
-                          <TableCell>{row.phone2}</TableCell>
+                          <TableCell>{row.phones[0] || ''}</TableCell>
+                          <TableCell>{row.phones[1] || ''}</TableCell>
                           <TableCell>{row.email}</TableCell>
                           <TableCell>{row.company}</TableCell>
+                          <TableCell>
+                            {row.qrCodeUrl && (
+                              <span className="text-xs text-blue-600 truncate" title={row.qrCodeUrl}>
+                                {row.qrCodeUrl.length > 30 ? row.qrCodeUrl.substring(0, 30) + '...' : row.qrCodeUrl}
+                              </span>
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1747,7 +1826,7 @@ You can use placeholders:
                     <strong>Available placeholders:</strong> {"{firstName}"}, {"{lastName}"}, {"{fullName}"}, {"{company}"}, {"{email}"}, {"{phone}"}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Note: Very long messages may be copied to clipboard instead of pre-filled in WhatsApp.
+                    Note: For mobile devices, the app will attempt to open WhatsApp directly. For desktop/laptops, WhatsApp Web will be used.
                   </p>
                 </div>
               </div>
@@ -1769,15 +1848,6 @@ You can use placeholders:
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Usage Limit Modal */}
-      <UsageLimitModal
-        isOpen={showLimitModal}
-        onClose={() => setShowLimitModal(false)}
-        feature="contact"
-        currentCount={usage.contactsCount}
-        limit={limits.contacts}
-      />
     </div>
   );
 }

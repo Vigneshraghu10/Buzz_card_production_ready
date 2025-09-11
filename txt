@@ -1,41 +1,58 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { isDuplicateContact } from "@/utils/duplicate";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Grid3X3, List, MoreVertical, Edit, Trash2, Users2, Loader2, Download, Check, FileText, Copy, Upload, FileDown, Phone } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import * as XLSX from 'xlsx';
+import { useState, useCallback, useRef, useEffect } from "react";
+import { 
+  Upload, 
+  Loader2, 
+  CheckCircle, 
+  XCircle, 
+  Users, 
+  FileText, 
+  Camera,
+  AlertTriangle,
+  Edit,
+  Save,
+  X,
+  Sparkles,
+  Zap,
+  CloudUpload,
+  Check,
+  Clock,
+  Brain,
+  FileImage,
+  AlertCircle,
+  CheckCircle2,
+  QrCode,
+  ScanLine,
+  CameraOff,
+  RotateCcw,
+  ArrowRight,
+  MessageCircle,
+  Share2,
+  ExternalLink,
+  Image as ImageIcon,
+  Smartphone,
+  Monitor
+} from "lucide-react";
 
-// WhatsApp Icon Component
-const WhatsAppIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893A11.821 11.821 0 0020.905 3.288z"/>
-  </svg>
-);
-
-interface Contact {
-  id: string;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  company: string;
-  services: string;
+// Mock interfaces and hooks (replace with actual implementations)
+interface ParsedContact {
+  name?: string;
+  company?: string;
+  email?: string;
+  phones?: string[];
+  landlines?: string[];
+  services?: string;
   address?: string;
-  groupIds: string[];
-  createdAt: Date;
-  ownerId: string;
+}
+
+interface ProcessedCard extends ParsedContact {
+  id: string;
+  status: 'success' | 'error' | 'duplicate';
+  error?: string;
+  saved?: boolean;
+  isFromCamera?: boolean;
+  captureIndex?: number;
+  qrCodes?: { type: string; data: string }[];
+  imageUrl?: string;
 }
 
 interface Group {
@@ -44,1573 +61,1484 @@ interface Group {
   ownerId: string;
 }
 
-interface Template {
+interface UploadResult {
   id: string;
-  name: string;
-  content: string;
-  createdAt: Date;
-  ownerId: string;
+  file: File;
+  imageUrl?: string;
+  status: "uploading" | "processing" | "completed" | "error";
+  error?: string;
+  isFromCamera?: boolean;
+  captureIndex?: number;
 }
 
-function Contacts() {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [contacts, setContacts] = useState<Contact[]>([]);
+// Mock utility functions
+const processMultipleBusinessCards = async (file: File) => {
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  return {
+    cards: [{
+      name: "John Smith",
+      company: "Tech Solutions Inc",
+      email: "john.smith@techsolutions.com",
+      phones: ["+1234567890"],
+      landlines: ["+1987654321"],
+      services: "Senior Software Engineer",
+      address: "123 Tech Street, Silicon Valley, CA 94000"
+    }],
+    errors: [],
+    totalProcessed: 1
+  };
+};
+
+const uploadToStorage = async (file: File, path: string) => {
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  return URL.createObjectURL(file);
+};
+
+const isDuplicateContact = async (uid: string, email: string, phone: string) => {
+  return Math.random() < 0.1; // 10% chance of duplicate
+};
+
+// Device detection utility
+const isMobileDevice = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+         window.innerWidth <= 768;
+};
+
+// WhatsApp messaging utility
+const sendWhatsAppMessage = (phoneNumber: string, message: string) => {
+  const formattedPhone = phoneNumber.replace(/[^0-9]/g, '');
+  const encodedMessage = encodeURIComponent(message);
+  
+  if (isMobileDevice()) {
+    // Mobile: Use WhatsApp app
+    window.open(`whatsapp://send?phone=${formattedPhone}&text=${encodedMessage}`, '_blank');
+  } else {
+    // Desktop: Use WhatsApp Web
+    window.open(`https://wa.me/${formattedPhone}?text=${encodedMessage}`, '_blank');
+  }
+};
+
+export default function EnhancedBusinessCardScanner() {
+  const [files, setFiles] = useState<File[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [processed, setProcessed] = useState<ProcessedCard[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [currentFile, setCurrentFile] = useState("");
+  const [showResults, setShowResults] = useState(false);
+  const [editingCard, setEditingCard] = useState<ProcessedCard | null>(null);
+  const [editData, setEditData] = useState<ParsedContact>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  
+  // Enhanced camera and upload states
+  const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState("all");
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [selectedContactForGroup, setSelectedContactForGroup] = useState<Contact | null>(null);
-  const [selectedContactForMessage, setSelectedContactForMessage] = useState<Contact | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
-  const [customMessage, setCustomMessage] = useState("");
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<any[]>([]);
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    phone: "",
-    email: "",
-    company: "",
-    services: "",
-    address: "",
-    groupIds: [] as string[],
-  });
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
+  const [captureCount, setCaptureCount] = useState(0);
+  const [cameraMode, setCameraMode] = useState<'capture' | 'processing'>('capture');
+  const [pendingCaptures, setPendingCaptures] = useState<UploadResult[]>([]);
+  const [editingQR, setEditingQR] = useState<{cardId: string, qrIndex: number} | null>(null);
+  const [qrEditValue, setQrEditValue] = useState("");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Mock usage and limits
+  const usage = { aiScansCount: 5 };
+  const limits = { aiScans: 10 };
+  const hasActiveSubscription = false;
+  const canUseAIScan = usage.aiScansCount < limits.aiScans || hasActiveSubscription;
 
   useEffect(() => {
-    const initializeContacts = async () => {
-      try {
-        setLoading(true);
-        if (user) {
-          await fetchData();
-        }
-      } catch (error) {
-        console.error("Error initializing contacts:", error);
-        toast({
-          title: "Error",
-          description: "Failed to initialize contacts",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
       }
     };
+  }, [cameraStream]);
 
-    initializeContacts();
-  }, [user]);
-
-  useEffect(() => {
-    let filtered = contacts;
-
-    if (searchTerm) {
-      filtered = filtered.filter(contact => 
-        contact.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        contact.phone?.includes(searchTerm) ||
-        contact.company?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (selectedGroup !== "all") {
-      filtered = filtered.filter(contact => 
-        contact.groupIds?.includes(selectedGroup)
-      );
-    }
-
-    setFilteredContacts(filtered);
-  }, [contacts, searchTerm, selectedGroup]);
-
-  const fetchData = async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
+  const startCamera = async () => {
     try {
-      // Fetch contacts
-      const contactsQuery = query(
-        collection(db, "contacts"), 
-        where("ownerId", "==", user.uid)
-      );
-      const contactsSnapshot = await getDocs(contactsQuery);
-      const contactsData = contactsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        groupIds: doc.data().groupIds || [],
-      })) as Contact[];
+      setCameraError(null);
+      
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
 
-      // Fetch groups
-      const groupsQuery = query(
-        collection(db, "groups"), 
-        where("ownerId", "==", user.uid)
-      );
-      const groupsSnapshot = await getDocs(groupsQuery);
-      const groupsData = groupsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Group[];
+      const constraints = {
+        video: {
+          facingMode,
+          width: { ideal: isMobileDevice() ? 1280 : 1920 },
+          height: { ideal: isMobileDevice() ? 720 : 1080 }
+        }
+      };
 
-      // Fetch templates
-      const templatesQuery = query(
-        collection(db, "templates"), 
-        where("ownerId", "==", user.uid)
-      );
-      const templatesSnapshot = await getDocs(templatesQuery);
-      const templatesData = templatesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      })) as Template[];
-
-      setContacts(contactsData);
-      setGroups(groupsData);
-      setTemplates(templatesData);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch data",
-        variant: "destructive",
-      });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      setCameraStream(stream);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+    } catch (error: any) {
+      console.error('Camera error:', error);
+      let errorMessage = 'Failed to access camera';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = 'Camera permission denied. Please allow camera access.';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = 'No camera found on this device.';
+      } else if (error.name === 'NotSupportedError') {
+        errorMessage = 'Camera not supported on this device.';
+      }
+      
+      setCameraError(errorMessage);
     }
   };
 
-  // Bulk Import Function
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setShowCamera(false);
+    setCameraError(null);
+    setCaptureCount(0);
+    setCameraMode('capture');
+    setPendingCaptures([]);
+  };
 
-    setImportFile(file);
+  const switchCamera = async () => {
+    const newFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(newFacingMode);
+    await startCamera();
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+
+      const newCaptureCount = captureCount + 1;
+      setCaptureCount(newCaptureCount);
+      
+      const timestamp = Date.now();
+      const file = new File([blob], `camera-capture-${newCaptureCount}-${timestamp}.jpg`, {
+        type: 'image/jpeg',
+      });
+
+      const newResult: UploadResult = {
+        id: Math.random().toString(36).substr(2, 9),
+        file,
+        status: "uploading",
+        isFromCamera: true,
+        captureIndex: newCaptureCount,
+      };
+
+      setPendingCaptures(prev => [...prev, newResult]);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const processAllCaptures = async () => {
+    if (pendingCaptures.length === 0) return;
     
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+    setCameraMode('processing');
+    setUploading(true);
+    
+    const captureFiles = pendingCaptures.map(capture => capture.file);
+    setFiles(prev => [...prev, ...captureFiles]);
+    
+    await processFiles();
+    
+    setUploading(false);
+    setPendingCaptures([]);
+    setCaptureCount(0);
+    setCameraMode('capture');
+    stopCamera();
+  };
+
+  const clearCaptures = () => {
+    setPendingCaptures([]);
+    setCaptureCount(0);
+  };
+
+  const handleFileSelect = useCallback((selectedFiles: FileList | null) => {
+    if (!selectedFiles) return;
+    
+    const fileArray = Array.from(selectedFiles);
+    const validFiles: File[] = [];
+    
+    fileArray.forEach(file => {
+      if (file.type.startsWith('image/') && file.size <= 10 * 1024 * 1024) {
+        validFiles.push(file);
+      }
+    });
+    
+    setFiles(prev => [...prev, ...validFiles]);
+  }, []);
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const processFiles = async () => {
+    if (files.length === 0) return;
+    
+    if (!canUseAIScan) return;
+    
+    setProcessing(true);
+    setProgress(0);
+    const results: ProcessedCard[] = [];
+    
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setCurrentFile(file.name);
+        setProgress((i / files.length) * 100);
         
-        // Transform and validate data
-        const transformedData = jsonData.map((row: any, index) => {
-          const firstName = row['First Name'] || row['firstName'] || row['Name']?.split(' ')[0] || '';
-          const lastName = row['Last Name'] || row['lastName'] || row['Name']?.split(' ').slice(1).join(' ') || '';
-          const phone = row['Phone'] || row['phone'] || row['Phone Number'] || row['Mobile'] || '';
-          const email = row['Email'] || row['email'] || row['Email Address'] || '';
-          const company = row['Company'] || row['company'] || row['Organization'] || '';
-          
-          return {
-            index: index + 1,
-            firstName: firstName.toString().trim(),
-            lastName: lastName.toString().trim(),
-            phone: phone.toString().trim(),
-            email: email.toString().toLowerCase().trim(),
-            company: company.toString().trim(),
-            services: row['Services'] || row['services'] || '',
-            address: row['Address'] || row['address'] || '',
-            isValid: !!(firstName && phone) // Minimum required fields
-          };
-        }).filter(row => row.firstName || row.phone); // Filter out completely empty rows
-
-        setImportPreview(transformedData);
-      } catch (error) {
-        console.error("Error reading file:", error);
-        toast({
-          title: "File Error",
-          description: "Unable to read the selected file. Please ensure it's a valid Excel file.",
-          variant: "destructive",
-        });
-      }
-    };
-    
-    reader.readAsArrayBuffer(file);
-  };
-
-  const handleBulkImport = async () => {
-    if (!user || !importPreview.length) return;
-    
-    setImporting(true);
-    let successCount = 0;
-    let duplicateCount = 0;
-    let errorCount = 0;
-    
-    try {
-      for (const contact of importPreview.filter(c => c.isValid)) {
         try {
-          // Check for duplicates
-          if (contact.email || contact.phone) {
-            const isDupe = await isDuplicateContact(user.uid, contact.email, contact.phone);
-            if (isDupe) {
-              duplicateCount++;
-              continue;
-            }
-          }
+          const imageUrl = await uploadToStorage(file, `cards/${Date.now()}-${file.name}`);
+          const result = await processMultipleBusinessCards(file);
           
-          const contactData = {
-            firstName: contact.firstName,
-            lastName: contact.lastName,
-            phone: contact.phone,
-            email: contact.email,
-            company: contact.company,
-            services: contact.services || '',
-            address: contact.address || '',
-            groupIds: [],
-            ownerId: user.uid,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-
-          await addDoc(collection(db, "contacts"), contactData);
-          successCount++;
-        } catch (error) {
-          console.error(`Error importing contact ${contact.firstName}:`, error);
-          errorCount++;
+          result.cards.forEach((card, cardIndex) => {
+            const processedCard: ProcessedCard = {
+              ...card,
+              id: `${file.name}_card_${cardIndex + 1}`,
+              status: 'success',
+              imageUrl,
+              isFromCamera: file.name.includes('camera-capture'),
+              qrCodes: [{ type: 'url', data: 'https://example.com/contact' }] // Mock QR data
+            };
+            results.push(processedCard);
+          });
+          
+        } catch (error: any) {
+          console.error(`Error processing ${file.name}:`, error);
+          results.push({
+            id: `${file.name}_failed`,
+            status: 'error',
+            error: error.message || "Failed to process image"
+          });
         }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
       
-      toast({
-        title: "Import Complete",
-        description: `Successfully imported ${successCount} contacts. ${duplicateCount} duplicates skipped. ${errorCount} errors.`,
-      });
+      setProgress(100);
+      setProcessed(results);
+      setShowResults(true);
       
-      setShowImportModal(false);
-      setImportFile(null);
-      setImportPreview([]);
-      await fetchData();
-      
-    } catch (error) {
-      console.error("Error during bulk import:", error);
-      toast({
-        title: "Import Error",
-        description: "An error occurred during import. Some contacts may not have been saved.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      console.error("Bulk processing error:", error);
     } finally {
-      setImporting(false);
+      setProcessing(false);
+      setCurrentFile("");
     }
   };
 
-  // Excel Export Function
-  const handleExportToExcel = async () => {
+  const saveContact = async (card: ProcessedCard) => {
+    setSaving(card.id);
+    
     try {
-      setExporting(true);
-      
-      if (filteredContacts.length === 0) {
-        toast({
-          title: "No Data",
-          description: "No contacts available to export",
-          variant: "destructive",
-        });
+      const isDupe = await isDuplicateContact("user123", card.email || "", card.phones?.[0] || "");
+      if (isDupe) {
+        alert("Duplicate contact found!");
+        setSaving(null);
         return;
       }
 
-      const excelData = filteredContacts.map(contact => {
-        const groupNames = contact.groupIds?.map(groupId => {
-          const group = groups.find(g => g.id === groupId);
-          return group?.name || '';
-        }).filter(name => name).join(', ') || 'No Groups';
-
-        return {
-          'First Name': contact.firstName || '',
-          'Last Name': contact.lastName || '',
-          'Full Name': `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
-          'Phone': contact.phone || '',
-          'Email': contact.email || '',
-          'Company': contact.company || '',
-          'Services': contact.services || '',
-          'Address': contact.address || '',
-          'Groups': groupNames,
-          'Created Date': contact.createdAt ? contact.createdAt.toLocaleDateString() : '',
-          'Created Time': contact.createdAt ? contact.createdAt.toLocaleTimeString() : '',
-        };
-      });
-
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(excelData);
-
-      const colWidths = [
-        { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 30 },
-        { wch: 20 }, { wch: 30 }, { wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
-      ];
-      ws['!cols'] = colWidths;
-
-      XLSX.utils.book_append_sheet(wb, ws, 'Contacts');
-
-      const currentDate = new Date();
-      const dateString = currentDate.toISOString().split('T')[0];
-      const filename = `contacts_export_${dateString}.xlsx`;
-
-      XLSX.writeFile(wb, filename);
-
-      toast({
-        title: "Success",
-        description: `${filteredContacts.length} contacts exported successfully to ${filename}`,
-      });
-
-    } catch (error) {
-      console.error("Error exporting to Excel:", error);
-      toast({
-        title: "Export Error",
-        description: `Failed to export contacts: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive",
-      });
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  // VCF Export Function
-  const generateVCF = (contact: Contact) => {
-    const vcf = [
-      'BEGIN:VCARD',
-      'VERSION:3.0',
-      `FN:${contact.firstName} ${contact.lastName}`,
-      `N:${contact.lastName};${contact.firstName};;;`,
-      `TEL;TYPE=CELL:${contact.phone}`,
-      contact.email ? `EMAIL:${contact.email}` : '',
-      contact.company ? `ORG:${contact.company}` : '',
-      contact.address ? `ADR;TYPE=WORK:;;${contact.address};;;;` : '',
-      contact.services ? `NOTE:Services: ${contact.services}` : '',
-      'END:VCARD'
-    ].filter(Boolean).join('\n');
-
-    return vcf;
-  };
-
-  const handleExportVCF = (contact: Contact) => {
-    try {
-      const vcfContent = generateVCF(contact);
-      const blob = new Blob([vcfContent], { type: 'text/vcard' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${contact.firstName}_${contact.lastName}.vcf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      // Mock save to database
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      toast({
-        title: "Success",
-        description: `VCF file downloaded for ${contact.firstName} ${contact.lastName}`,
-      });
-    } catch (error) {
-      console.error("Error generating VCF:", error);
-      toast({
-        title: "Export Error",
-        description: "Failed to generate VCF file",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.phone.trim() || !formData.email.trim() || !formData.company.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "User not authenticated",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSaving(true);
-    
-    try {
-      if (editingContact) {
-        await updateDoc(doc(db, "contacts", editingContact.id), {
-          ...formData,
-          email: formData.email.toLowerCase(),
-          updatedAt: serverTimestamp(),
-        });
-        
-        toast({
-          title: "Success",
-          description: "Contact updated successfully",
-        });
-        
-        setShowEditModal(false);
-        setEditingContact(null);
-      } else {
-        if (formData.email || formData.phone) {
-          try {
-            const isDupe = await isDuplicateContact(user.uid, formData.email, formData.phone);
-            if (isDupe) {
-              toast({
-                title: "Duplicate Contact",
-                description: "A contact with this email or phone already exists",
-                variant: "destructive",
-              });
-              setSaving(false);
-              return;
-            }
-          } catch (dupeError) {
-            console.error("Error checking duplicates:", dupeError);
-          }
-        }
-
-        const contactData = {
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          phone: formData.phone.trim(),
-          email: formData.email.toLowerCase().trim(),
-          company: formData.company.trim(),
-          services: formData.services.trim(),
-          address: formData.address.trim(),
-          groupIds: formData.groupIds || [],
-          ownerId: user.uid,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        };
-
-        await addDoc(collection(db, "contacts"), contactData);
-
-        toast({
-          title: "Success",
-          description: "Contact added successfully",
-        });
-        
-        setShowAddModal(false);
-      }
-
-      setFormData({
-        firstName: "",
-        lastName: "",
-        phone: "",
-        email: "",
-        company: "",
-        services: "",
-        address: "",
-        groupIds: [],
-      });
+      setProcessed(prev => 
+        prev.map(p => 
+          p.id === card.id ? { ...p, saved: true } : p
+        )
+      );
       
-      await fetchData();
     } catch (error) {
       console.error("Error saving contact:", error);
-      toast({
-        title: "Error",
-        description: `Failed to save contact: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive",
-      });
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   };
 
-  const handleEditContact = (contact: Contact) => {
-    setEditingContact(contact);
-    setFormData({
-      firstName: contact.firstName || "",
-      lastName: contact.lastName || "",
-      phone: contact.phone || "",
-      email: contact.email || "",
-      company: contact.company || "",
-      services: contact.services || "",
-      address: contact.address || "",
-      groupIds: contact.groupIds || [],
-    });
-    setShowEditModal(true);
+  const handleEditCard = (card: ProcessedCard) => {
+    setEditingCard(card);
+    setEditData({ ...card });
   };
 
-  const handleDeleteContact = async (contactId: string) => {
-    if (!window.confirm("Are you sure you want to delete this contact?")) {
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, "contacts", contactId));
-      toast({
-        title: "Success",
-        description: "Contact deleted successfully",
-      });
-      fetchData();
-    } catch (error) {
-      console.error("Error deleting contact:", error);
-      toast({
-        title: "Error",
-        description: "Failed to delete contact",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleAssignToGroup = (contact: Contact) => {
-    setSelectedContactForGroup(contact);
-    setShowGroupModal(true);
-  };
-
-  const handleGroupAssignment = async (groupId: string) => {
-    if (!selectedContactForGroup) return;
+  const saveEditedCard = () => {
+    if (!editingCard) return;
     
-    try {
-      const currentGroupIds = selectedContactForGroup.groupIds || [];
-      const updatedGroupIds = currentGroupIds.includes(groupId)
-        ? currentGroupIds.filter(id => id !== groupId)
-        : [...currentGroupIds, groupId];
-      
-      await updateDoc(doc(db, "contacts", selectedContactForGroup.id), {
-        groupIds: updatedGroupIds,
-        updatedAt: serverTimestamp(),
-      });
-      
-      setSelectedContactForGroup(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          groupIds: updatedGroupIds
-        };
-      });
-      
-      toast({
-        title: "Success",
-        description: "Group assignment updated",
-      });
-      
-      await fetchData();
-    } catch (error) {
-      console.error("Error updating group assignment:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update group assignment",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Updated handleSendMessage function with template integration
-  const handleSendMessage = (contact: Contact) => {
-    setSelectedContactForMessage(contact);
-    setSelectedTemplate(null);
-    setCustomMessage("");
-    setShowTemplateModal(true);
-  };
-
-  // Function to replace placeholders in template content
-  const replacePlaceholders = (content: string, contact: Contact) => {
-    return content
-      .replace(/\{firstName\}/g, contact.firstName || '')
-      .replace(/\{lastName\}/g, contact.lastName || '')
-      .replace(/\{fullName\}/g, `${contact.firstName || ''} ${contact.lastName || ''}`.trim())
-      .replace(/\{company\}/g, contact.company || '')
-      .replace(/\{email\}/g, contact.email || '')
-      .replace(/\{phone\}/g, contact.phone || '');
-  };
-
-  // Enhanced function to clean and format message for WhatsApp URL
-  const formatMessageForWhatsApp = (message: string) => {
-    // Clean the message by removing extra spaces and fixing line breaks
-    let cleanMessage = message
-      .trim()
-      .replace(/\n\s*\n\s*\n/g, '\n\n') // Replace multiple line breaks with double line breaks
-      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-      .replace(/\n /g, '\n') // Remove spaces after line breaks
-      .replace(/ \n/g, '\n'); // Remove spaces before line breaks
-
-    // Limit message length to avoid URL length issues (WhatsApp URL limit ~2000 chars)
-    if (cleanMessage.length > 1500) {
-      cleanMessage = cleanMessage.substring(0, 1500) + '...';
-    }
-
-    return cleanMessage;
-  };
-
-  // Copy message to clipboard function
-  const copyMessageToClipboard = async (message: string) => {
-    try {
-      await navigator.clipboard.writeText(message);
-      toast({
-        title: "Copied!",
-        description: "Message copied to clipboard. You can paste it in WhatsApp manually.",
-      });
-    } catch (error) {
-      console.error("Failed to copy message:", error);
-      toast({
-        title: "Copy Failed",
-        description: "Unable to copy message to clipboard",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Function to send WhatsApp message with selected template or custom message
-  const handleSendWhatsAppMessage = () => {
-    if (!selectedContactForMessage) return;
-    
-    // Clean and format phone number
-    const phoneNumber = selectedContactForMessage.phone?.replace(/[^\d+]/g, '') || '';
-    
-    if (!phoneNumber) {
-      toast({
-        title: "Error",
-        description: "No phone number available for this contact",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    let messageContent = "";
-    
-    if (selectedTemplate) {
-      messageContent = replacePlaceholders(selectedTemplate.content, selectedContactForMessage);
-    } else if (customMessage.trim()) {
-      messageContent = replacePlaceholders(customMessage, selectedContactForMessage);
-    } else {
-      messageContent = `Hi ${selectedContactForMessage.firstName}, I hope you're doing well!`;
-    }
-
-    // Format message for WhatsApp
-    const formattedMessage = formatMessageForWhatsApp(messageContent);
-
-    // Try to open WhatsApp with the message
-    try {
-      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(formattedMessage)}`;
-      
-      // Check if URL is too long
-      if (whatsappUrl.length > 2000) {
-        // If URL is too long, copy to clipboard instead
-        copyMessageToClipboard(formattedMessage);
-        
-        // Still open WhatsApp but without the message
-        const simpleWhatsappUrl = `https://wa.me/${phoneNumber}`;
-        window.open(simpleWhatsappUrl, '_blank');
-        
-        toast({
-          title: "Message Too Long",
-          description: "Message copied to clipboard. Please paste it manually in WhatsApp.",
-        });
-      } else {
-        window.open(whatsappUrl, '_blank');
-        
-        toast({
-          title: "Success",
-          description: `Opening WhatsApp to send message to ${selectedContactForMessage.firstName}`,
-        });
-      }
-    } catch (error) {
-      console.error("Error opening WhatsApp:", error);
-      // Fallback: copy message to clipboard
-      copyMessageToClipboard(formattedMessage);
-    }
-    
-    setShowTemplateModal(false);
-  };
-
-  const getGroupName = (groupId: string) => {
-    const group = groups.find(g => g.id === groupId);
-    return group?.name || "";
-  };
-
-  const getInitials = (firstName: string, lastName: string) => {
-    const first = firstName?.charAt(0) || "";
-    const last = lastName?.charAt(0) || "";
-    return `${first}${last}`.toUpperCase();
-  };
-
-  const getBadgeColor = (index: number) => {
-    const colors = [
-      "bg-blue-100 text-blue-800", 
-      "bg-purple-100 text-purple-800", 
-      "bg-green-100 text-green-800", 
-      "bg-orange-100 text-orange-800"
-    ];
-    return colors[index % colors.length];
-  };
-
-  const handleOpenAddModal = () => {
-    setEditingContact(null);
-    setFormData({
-      firstName: "",
-      lastName: "",
-      phone: "",
-      email: "",
-      company: "",
-      services: "",
-      address: "",
-      groupIds: [],
-    });
-    setShowAddModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowAddModal(false);
-    setShowEditModal(false);
-    setEditingContact(null);
-    setFormData({
-      firstName: "",
-      lastName: "",
-      phone: "",
-      email: "",
-      company: "",
-      services: "",
-      address: "",
-      groupIds: [],
-    });
-  };
-
-  if (!user) {
-    return (
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Authentication Required</h2>
-            <p className="text-gray-600">Please log in to access your contacts.</p>
-          </div>
-        </div>
-      </div>
+    setProcessed(prev =>
+      prev.map(p =>
+        p.id === editingCard.id ? { ...p, ...editData } : p
+      )
     );
-  }
+    
+    setEditingCard(null);
+    setEditData({});
+  };
 
-  if (loading) {
+  const handleQREdit = (cardId: string, qrIndex: number, currentData: string) => {
+    setEditingQR({ cardId, qrIndex });
+    setQrEditValue(currentData);
+  };
+
+  const saveQREdit = () => {
+    if (!editingQR) return;
+    
+    setProcessed(prev =>
+      prev.map(p => {
+        if (p.id === editingQR.cardId && p.qrCodes) {
+          const updatedQRs = [...p.qrCodes];
+          updatedQRs[editingQR.qrIndex] = { ...updatedQRs[editingQR.qrIndex], data: qrEditValue };
+          return { ...p, qrCodes: updatedQRs };
+        }
+        return p;
+      })
+    );
+    
+    setEditingQR(null);
+    setQrEditValue("");
+  };
+
+  const sendWhatsApp = (card: ProcessedCard) => {
+    const phone = card.phones?.[0] || card.landlines?.[0];
+    if (!phone) return;
+    
+    const message = `Hi ${card.name || 'there'}! I got your contact information from your business card. Nice to connect with you!`;
+    sendWhatsAppMessage(phone, message);
+  };
+
+  if (showResults) {
     return (
-      <div className="py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-48 mb-8"></div>
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {[...Array(8)].map((_, i) => (
-                <div key={i} className="bg-gray-200 h-48 rounded-lg"></div>
-              ))}
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-4 px-4 sm:py-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8">
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Processing Results</h2>
+              <p className="text-gray-600 text-sm sm:text-base">
+                Found {processed.filter(p => p.status === 'success').length} business cards
+              </p>
+            </div>
+            <div className="flex space-x-3 mt-4 sm:mt-0">
+              <button
+                onClick={() => {
+                  setShowResults(false);
+                  setProcessed([]);
+                  setFiles([]);
+                }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Process More
+              </button>
+              <button 
+                onClick={() => alert('Save all functionality')}
+                className="px-4 py-2 text-sm bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-colors"
+              >
+                Save All Contacts
+              </button>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
 
-  // Grid View Component
-  const GridView = () => (
-    <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {filteredContacts.map((contact) => (
-        <Card key={contact.id} className="hover:shadow-md transition-shadow relative">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start space-x-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-primary font-medium">
-                    {getInitials(contact.firstName, contact.lastName)}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-lg font-medium text-gray-900 truncate">
-                    {contact.firstName} {contact.lastName}
-                  </h3>
-                  <p className="text-sm text-gray-500 truncate">{contact.company}</p>
-                  <p className="text-sm text-gray-500">{contact.phone}</p>
-                  <p className="text-sm text-gray-500 truncate">{contact.email}</p>
-                </div>
-              </div>
-              
-              <div className="absolute top-4 right-4">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => window.open(`tel:${contact.phone}`)}>
-                      <Phone className="h-4 w-4 mr-2" />
-                      Call
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleAssignToGroup(contact)}>
-                      <Users2 className="h-4 w-4 mr-2" />
-                      Assign Groups
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleExportVCF(contact)}>
-                      <FileDown className="h-4 w-4 mr-2" />
-                      Export VCF
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => handleDeleteContact(contact.id)}
-                      className="text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-            {contact.services && (
-              <div className="mt-4">
-                <p className="text-sm text-gray-600 line-clamp-2">{contact.services}</p>
-              </div>
-            )}
-            <div className="mt-4 flex justify-between items-center">
-              <div className="flex flex-wrap gap-1">
-                {contact.groupIds?.slice(0, 3).map((groupId, index) => (
-                  <Badge 
-                    key={groupId} 
-                    variant="secondary" 
-                    className={`text-xs ${getBadgeColor(index)}`}
-                  >
-                    {getGroupName(groupId)}
-                  </Badge>
-                ))}
-                {contact.groupIds && contact.groupIds.length > 3 && (
-                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-800">
-                    +{contact.groupIds.length - 3}
-                  </Badge>
-                )}
-              </div>
-              <div className="flex items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleSendMessage(contact)}
-                >
-                  <WhatsAppIcon className="h-4 w-4 text-green-600" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleEditContact(contact)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-
-  // Table View Component
-  const TableView = () => (
-    <div className="mt-6">
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Groups</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredContacts.map((contact) => (
-                <TableRow key={contact.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-3">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-primary text-sm font-medium">
-                          {getInitials(contact.firstName, contact.lastName)}
-                        </span>
+          <div className="space-y-6">
+            {processed.map((card, index) => (
+              <div key={card.id} className={`bg-white rounded-2xl shadow-lg border-2 transition-all hover:shadow-xl ${
+                card.status === 'error' ? 'border-red-200 bg-red-50' : 
+                card.saved ? 'border-green-200 bg-green-50' : 'border-gray-100'
+              }`}>
+                <div className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4">
+                    <div className="flex items-center mb-4 sm:mb-0">
+                      {card.status === 'error' ? (
+                        <XCircle className="h-6 w-6 text-red-500 mr-3" />
+                      ) : card.saved ? (
+                        <CheckCircle className="h-6 w-6 text-green-500 mr-3" />
+                      ) : (
+                        <Camera className="h-6 w-6 text-blue-500 mr-3" />
+                      )}
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {card.status === 'error' ? 'Processing Error' : card.name || 'Unnamed Contact'}
+                        </h3>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {card.isFromCamera && (
+                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium">
+                              Camera
+                            </span>
+                          )}
+                          {card.qrCodes && card.qrCodes.length > 0 && (
+                            <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full font-medium">
+                              QR Code
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className="font-medium">
-                        {contact.firstName} {contact.lastName}
-                      </span>
                     </div>
-                  </TableCell>
-                  <TableCell>{contact.phone}</TableCell>
-                  <TableCell className="max-w-xs truncate">{contact.email}</TableCell>
-                  <TableCell className="max-w-xs truncate">{contact.company}</TableCell>
-                  <TableCell>
-                    {contact.groupIds && contact.groupIds.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {contact.groupIds.slice(0, 2).map((groupId, index) => (
-                          <Badge 
-                            key={groupId} 
-                            variant="secondary" 
-                            className={`text-xs ${getBadgeColor(index)}`}
-                          >
-                            {getGroupName(groupId)}
-                          </Badge>
-                        ))}
-                        {contact.groupIds.length > 2 && (
-                          <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-800">
-                            +{contact.groupIds.length - 2}
-                          </Badge>
-                        )}
+                    
+                    {card.status === 'success' && !card.saved && (
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => sendWhatsApp(card)}
+                          disabled={!card.phones?.length && !card.landlines?.length}
+                          className="flex items-center px-3 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleEditCard(card)}
+                          className="flex items-center px-3 py-2 text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors text-sm"
+                        >
+                          <Edit className="h-4 w-4 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => saveContact(card)}
+                          disabled={saving === card.id}
+                          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
+                        >
+                          {saving === card.id ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Save className="h-4 w-4 mr-1" />
+                          )}
+                          Save
+                        </button>
                       </div>
-                    ) : (
-                      <span className="text-gray-400 text-sm">No groups</span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSendMessage(contact)}
-                      >
-                        <WhatsAppIcon className="h-4 w-4 text-green-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditContact(contact)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => window.open(`tel:${contact.phone}`)}
-                          >
-                            <Phone className="h-4 w-4 mr-2" />
-                            Call
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleAssignToGroup(contact)}
-                          >
-                            <Users2 className="h-4 w-4 mr-2" />
-                          Assign Groups
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleExportVCF(contact)}>
-                          <FileDown className="h-4 w-4 mr-2" />
-                          Export VCF
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteContact(contact.id)}
-                            className="text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
-    </div>
-  );
+                  </div>
 
-  return (
-    <div className="py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <div className="md:flex md:items-center md:justify-between">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:text-3xl sm:truncate">
-              Contacts ({contacts.length})
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage your business contacts and relationships
-            </p>
-          </div>
-          <div className="mt-4 flex md:mt-0 md:ml-4 space-x-3">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowImportModal(true)}
-              className="text-blue-600 border-blue-600 hover:bg-blue-50"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import Excel
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              onClick={handleExportToExcel}
-              disabled={exporting || filteredContacts.length === 0}
-              className="text-green-600 border-green-600 hover:bg-green-50"
-            >
-              {exporting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Excel ({filteredContacts.length})
-                </>
-              )}
-            </Button>
-
-            <Dialog open={showAddModal || showEditModal} onOpenChange={(open) => {
-              if (!open) {
-                handleCloseModal();
-              }
-            }}>
-              <DialogTrigger asChild>
-                <Button onClick={handleOpenAddModal}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Contact
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>{editingContact ? "Edit Contact" : "Add New Contact"}</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="firstName">First Name *</Label>
-                      <Input
-                        id="firstName"
-                        value={formData.firstName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
-                        required
-                        disabled={saving}
-                      />
+                  {card.status === 'error' ? (
+                    <div className="text-red-600 flex items-center">
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      {card.error}
                     </div>
-                    <div>
-                      <Label htmlFor="lastName">Last Name *</Label>
-                      <Input
-                        id="lastName"
-                        value={formData.lastName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
-                        required
-                        disabled={saving}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="phone">Phone *</Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                        required
-                        disabled={saving}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                        required
-                        disabled={saving}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="company">Company *</Label>
-                    <Input
-                      id="company"
-                      value={formData.company}
-                      onChange={(e) => setFormData(prev => ({ ...prev, company: e.target.value }))}
-                      required
-                      disabled={saving}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="services">Services</Label>
-                    <Textarea
-                      id="services"
-                      value={formData.services}
-                      onChange={(e) => setFormData(prev => ({ ...prev, services: e.target.value }))}
-                      rows={3}
-                      disabled={saving}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="address">Address (Optional)</Label>
-                    <Textarea
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                      rows={2}
-                      disabled={saving}
-                    />
-                  </div>
-                  {groups.length > 0 && (
-                    <div>
-                      <Label htmlFor="groups">Assign to Groups (Optional)</Label>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {groups.map(group => (
-                          <label key={group.id} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={formData.groupIds.includes(group.id)}
-                              disabled={saving}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setFormData(prev => ({ ...prev, groupIds: [...prev.groupIds, group.id] }));
-                                } else {
-                                  setFormData(prev => ({ ...prev, groupIds: prev.groupIds.filter(id => id !== group.id) }));
-                                }
-                              }}
-                            />
-                            <span className="text-sm">{group.name}</span>
-                          </label>
-                        ))}
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {card.imageUrl && (
+                        <div className="lg:col-span-4">
+                          <img 
+                            src={card.imageUrl} 
+                            alt="Business card" 
+                            className="w-full h-48 sm:h-32 lg:h-40 object-cover rounded-xl shadow-md"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium text-gray-500">Company</label>
+                          <p className="mt-1 text-gray-900">{card.company || "Not provided"}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-500">Email</label>
+                          <p className="mt-1 text-gray-900">{card.email || "Not provided"}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-500">Phone Numbers</label>
+                          <p className="mt-1 text-gray-900">
+                            {card.phones && card.phones.length > 0 
+                              ? card.phones.join(", ") 
+                              : "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-500">Landlines</label>
+                          <p className="mt-1 text-gray-900">
+                            {card.landlines && card.landlines.length > 0 
+                              ? card.landlines.join(", ") 
+                              : "Not provided"}
+                          </p>
+                        </div>
+                        {card.services && (
+                          <div className="sm:col-span-2">
+                            <label className="text-sm font-medium text-gray-500">Services/Position</label>
+                            <p className="mt-1 text-gray-900">{card.services}</p>
+                          </div>
+                        )}
+                        {card.address && (
+                          <div className="sm:col-span-2">
+                            <label className="text-sm font-medium text-gray-500">Address</label>
+                            <p className="mt-1 text-gray-900">{card.address}</p>
+                          </div>
+                        )}
+                        {card.qrCodes && card.qrCodes.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <label className="text-sm font-medium text-gray-500">QR Code Data</label>
+                            <div className="mt-2 space-y-2">
+                              {card.qrCodes.map((qr, idx) => (
+                                <div key={idx} className="bg-purple-50 p-3 rounded-xl border border-purple-200">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <span className="font-medium capitalize text-purple-800">{qr.type}:</span>
+                                      <span className="ml-2 text-purple-700 break-all">{qr.data}</span>
+                                    </div>
+                                    <button
+                                      onClick={() => handleQREdit(card.id, idx, qr.data)}
+                                      className="ml-2 p-1 text-purple-600 hover:bg-purple-100 rounded"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
-                  <div className="flex justify-end space-x-4">
-                    <Button type="button" variant="outline" onClick={handleCloseModal} disabled={saving}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={saving}>
-                      {saving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          {editingContact ? "Updating..." : "Adding..."}
-                        </>
-                      ) : (
-                        editingContact ? "Update Contact" : "Add Contact"
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </DialogContent>
-            </Dialog>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Filter and Search Bar */}
-        <div className="mt-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="sm:flex sm:items-center sm:justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                    <Input
+        {/* Edit Contact Modal */}
+        {editingCard && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-6">Edit Contact Information</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <input
                       type="text"
-                      className="pl-10"
-                      placeholder="Search contacts by name, email, phone, or company..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      value={editData.name || ""}
+                      onChange={(e) => setEditData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Company</label>
+                    <input
+                      type="text"
+                      value={editData.company || ""}
+                      onChange={(e) => setEditData(prev => ({ ...prev, company: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editData.email || ""}
+                      onChange={(e) => setEditData(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone Numbers (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={editData.phones?.join(", ") || ""}
+                      onChange={(e) => setEditData(prev => ({ 
+                        ...prev, 
+                        phones: e.target.value.split(",").map(p => p.trim()).filter(p => p)
+                      }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Services/Position</label>
+                    <textarea
+                      value={editData.services || ""}
+                      onChange={(e) => setEditData(prev => ({ ...prev, services: e.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                    <textarea
+                      value={editData.address || ""}
+                      onChange={(e) => setEditData(prev => ({ ...prev, address: e.target.value }))}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
                 </div>
-                <div className="mt-4 sm:mt-0 sm:ml-4 flex items-center space-x-4">
-                  {/* View Toggle */}
-                  <div className="flex bg-gray-100 rounded-lg p-1">
-                    <Button
-                      variant={viewMode === "grid" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("grid")}
-                      className={`h-8 w-8 p-0 ${
-                        viewMode === "grid" 
-                          ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm" 
-                          : "hover:bg-gray-200 text-gray-600"
-                      }`}
-                    >
-                      <Grid3X3 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant={viewMode === "table" ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => setViewMode("table")}
-                      className={`h-8 w-8 p-0 ${
-                        viewMode === "table" 
-                          ? "bg-blue-600 hover:bg-blue-700 text-white shadow-sm" 
-                          : "hover:bg-gray-200 text-gray-600"
-                      }`}
-                    >
-                      <List className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  {/* Filter */}
-                  <Select value={selectedGroup} onValueChange={setSelectedGroup}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Groups</SelectItem>
-                      {groups.map(group => (
-                        <SelectItem key={group.id} value={group.id}>
-                          {group.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button 
+                    onClick={() => setEditingCard(null)}
+                    className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={saveEditedCard}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Save Changes
+                  </button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </div>
+        )}
 
-        {/* Contacts Display */}
-        {filteredContacts.length > 0 ? (
-          viewMode === "grid" ? <GridView /> : <TableView />
-        ) : (
-          <div className="mt-6 text-center py-12">
-            <div className="text-gray-500">
-              {searchTerm || selectedGroup !== "all" 
-                ? "No contacts found matching your criteria"
-                : "No contacts yet. Add your first contact to get started."
-              }
+        {/* Edit QR Modal */}
+        {editingQR && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl w-full max-w-md">
+              <div className="p-6">
+                <h3 className="text-xl font-semibold mb-4">Edit QR Code URL</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">URL</label>
+                    <input
+                      type="url"
+                      value={qrEditValue}
+                      onChange={(e) => setQrEditValue(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      placeholder="https://example.com"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button 
+                    onClick={() => setEditingQR(null)}
+                    className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={saveQREdit}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Save URL
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Bulk Import Modal */}
-      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Bulk Import Contacts</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6">
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="font-medium text-blue-800 mb-2">Import Instructions:</h4>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• Upload an Excel file (.xlsx) with contact information</li>
-                <li>• Required columns: <strong>First Name</strong> and <strong>Phone</strong></li>
-                <li>• Optional columns: Last Name, Email, Company, Services, Address</li>
-                <li>• Alternative column names are supported (e.g., 'Name', 'Mobile', 'Organization')</li>
-                <li>• Duplicates will be automatically skipped</li>
-              </ul>
-            </div>
-
-            <div>
-              <Label htmlFor="importFile">Select Excel File</Label>
-              <Input
-
-                id="importFile"
-                name="importFile"
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileSelect}
-                className="mt-2"
-              />
-            </div>
-
-            {importPreview.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Preview ({importPreview.length} rows)</h4>
-                  <div className="text-sm text-gray-600">
-                    Valid: {importPreview.filter(row => row.isValid).length} | 
-                    Invalid: {importPreview.filter(row => !row.isValid).length}
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-4 px-4 sm:py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="mb-8">
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+                  <Sparkles className="text-white h-7 w-7" />
+                </div>
+                <div>
+                  <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    AI Business Card Scanner
+                  </h2>
+                  <p className="text-gray-600 text-sm sm:text-lg mt-1">
+                    Extract data from multiple business cards with advanced AI detection
+                  </p>
+                </div>
+              </div>
+              
+              {/* AI Features Banner */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 rounded-xl border border-blue-200">
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 flex-shrink-0" />
+                    <div>
+                      <h3 className="font-semibold text-blue-900 text-sm sm:text-base">AI-Powered</h3>
+                      <p className="text-xs sm:text-sm text-blue-700">Advanced OCR</p>
+                    </div>
                   </div>
                 </div>
-
-                <div className="max-h-60 overflow-y-auto border rounded-lg">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Status</TableHead>
-                        <TableHead>First Name</TableHead>
-                        <TableHead>Last Name</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Company</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {importPreview.slice(0, 10).map((row, index) => (
-                        <TableRow key={index} className={!row.isValid ? "bg-red-50" : ""}>
-                          <TableCell>
-                            {row.isValid ? (
-                              <Check className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <span className="text-xs text-red-600">Invalid</span>
-                            )}
-                          </TableCell>
-                          <TableCell>{row.firstName}</TableCell>
-                          <TableCell>{row.lastName}</TableCell>
-                          <TableCell>{row.phone}</TableCell>
-                          <TableCell>{row.email}</TableCell>
-                          <TableCell>{row.company}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 rounded-xl border border-green-200">
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <Camera className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 flex-shrink-0" />
+                    <div>
+                      <h3 className="font-semibold text-green-900 text-sm sm:text-base">Multi-Card</h3>
+                      <p className="text-xs sm:text-sm text-green-700">Batch process</p>
+                    </div>
+                  </div>
                 </div>
+                <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-3 sm:p-4 rounded-xl border border-purple-200">
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <QrCode className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 flex-shrink-0" />
+                    <div>
+                      <h3 className="font-semibold text-purple-900 text-sm sm:text-base">QR Support</h3>
+                      <p className="text-xs sm:text-sm text-purple-700">vCard detect</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-3 sm:p-4 rounded-xl border border-amber-200">
+                  <div className="flex items-center space-x-2 sm:space-x-3">
+                    <CheckCircle2 className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600 flex-shrink-0" />
+                    <div>
+                      <h3 className="font-semibold text-amber-900 text-sm sm:text-base">Smart Check</h3>
+                      <p className="text-xs sm:text-sm text-amber-700">No duplicates</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Usage Status */}
+              <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Zap className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <p className="font-medium text-blue-900 text-sm sm:text-base">
+                        {hasActiveSubscription ? 'Premium Plan Active' : 'Free Plan'}
+                      </p>
+                      <p className="text-xs sm:text-sm text-blue-700">
+                        {hasActiveSubscription 
+                          ? 'Unlimited AI scans available' 
+                          : `${usage.aiScansCount}/${limits.aiScans} AI scans used`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  {!canUseAIScan && (
+                    <button className="px-3 py-1.5 text-xs sm:text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-colors">
+                      Upgrade Now
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
-                {importPreview.length > 10 && (
-                  <p className="text-sm text-gray-500">
-                    Showing first 10 rows. Total: {importPreview.length} rows
-                  </p>
-                )}
+            {/* Upload Zone */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
+              {/* Header */}
+              <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-4 sm:p-6 text-white">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <FileImage className="h-5 w-5 sm:h-6 sm:w-6" />
+                    <h3 className="text-base sm:text-lg font-semibold">Smart Upload Zone</h3>
+                  </div>
+                  <div className="bg-white/20 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium">
+                    {files.length > 0 ? `${files.length}/10 files` : 'Ready'}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Upload Area */}
+              <div 
+                className="p-6 sm:p-8 border-2 border-dashed border-purple-200 m-4 sm:m-6 rounded-2xl hover:border-purple-400 transition-all duration-300 hover:bg-purple-50/50"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (canUseAIScan) {
+                    handleFileSelect(e.dataTransfer.files);
+                  }
+                }}
+              >
+                <div className="text-center">
+                  <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mb-4 sm:mb-6">
+                    <CloudUpload className="text-purple-600 h-8 w-8 sm:h-10 sm:w-10" />
+                  </div>
+                  <h3 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">Drop Your Business Cards Here</h3>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center">
+                    <button 
+                      onClick={() => {
+                        if (canUseAIScan) {
+                          const input = document.createElement('input');
+                          input.type = 'file';
+                          input.multiple = true;
+                          input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                          input.onchange = (e) => {
+                            const files = (e.target as HTMLInputElement).files;
+                            if (files) handleFileSelect(files);
+                          };
+                          input.click();
+                        }
+                      }}
+                      disabled={processing}
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50 transition-colors text-sm sm:text-base"
+                    >
+                      <CloudUpload className="h-4 w-4 sm:h-5 sm:w-5 mr-2 inline" />
+                      {processing ? 'Processing...' : 'Choose Files'}
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        if (canUseAIScan) {
+                          setShowCamera(true);
+                          startCamera();
+                        }
+                      }}
+                      disabled={processing}
+                      className="border-2 border-purple-300 text-purple-600 hover:bg-purple-50 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-semibold transition-colors text-sm sm:text-base"
+                    >
+                      <Camera className="h-4 w-4 sm:h-5 sm:w-5 mr-2 inline" />
+                      Use Camera
+                    </button>
+                  </div>
+                  
+                  <div className="mt-4 text-center">
+                    <p className="text-sm text-gray-500">Or drag and drop files</p>
+                    <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB each • Max 10 files</p>
+                    <p className="text-xs text-purple-600 mt-1 flex items-center justify-center">
+                      <QrCode className="h-3 w-3 mr-1" />
+                      QR codes automatically detected
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Selected Files - Enhanced Display */}
+            {files.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 sm:p-6 text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
+                      <h3 className="text-base sm:text-lg font-semibold">Selected Files ({files.length})</h3>
+                    </div>
+                    <div className="text-xs sm:text-sm opacity-90">
+                      Ready for processing
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-4 sm:p-6">
+                  {/* File Grid - Enhanced for Mobile */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+                    {files.slice(0, 6).map((file, index) => (
+                      <div key={index} className="relative group">
+                        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border-2 border-gray-200 hover:border-purple-300 transition-all">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center flex-1 min-w-0">
+                              <ImageIcon className="h-5 w-5 text-gray-500 mr-2 flex-shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                                <p className="text-xs text-gray-500">
+                                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeFile(index)}
+                              disabled={processing}
+                              className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {file.name.includes('camera-capture') && (
+                            <div className="flex items-center space-x-1">
+                              <Camera className="h-3 w-3 text-green-600" />
+                              <span className="text-xs text-green-600 font-medium">Camera</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {files.length > 6 && (
+                      <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200 flex items-center justify-center">
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-purple-900">+{files.length - 6} more</p>
+                          <p className="text-xs text-purple-700">files ready</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Compact Process Button */}
+                  <button
+                    onClick={processFiles}
+                    disabled={processing || files.length === 0}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50 transition-colors flex items-center justify-center text-sm sm:text-base"
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                        Process {files.length} with AI
+                      </>
+                    )}
+                  </button>
+                  
+                  {/* Compact Progress Bar */}
+                  {processing && (
+                    <div className="mt-4 space-y-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-600">
+                        <span>{Math.round(progress)}% complete</span>
+                        {currentFile && <span className="truncate ml-2">{currentFile}</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            <div className="flex justify-end space-x-4">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportFile(null);
-                  setImportPreview([]);
-                }}
-                disabled={importing}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleBulkImport}
-                disabled={importing || importPreview.length === 0 || !importPreview.some(row => row.isValid)}
-              >
-                {importing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Importing...
-                  </>
-                ) : (
-                  `Import ${importPreview.filter(row => row.isValid).length} Contacts`
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Group Assignment Modal */}
-      <Dialog open={showGroupModal} onOpenChange={setShowGroupModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign Contact to Groups</DialogTitle>
-          </DialogHeader>
-          {selectedContactForGroup && (
-            <div className="space-y-4">
-              <p className="text-sm text-gray-600">
-                Assigning <strong>{selectedContactForGroup.firstName} {selectedContactForGroup.lastName}</strong> to groups:
-              </p>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {groups.map(group => {
-                  const isChecked = selectedContactForGroup.groupIds?.includes(group.id) || false;
-                  return (
-                    <div key={group.id} className="flex items-center space-x-3">
-                      <div className="relative">
-                        <input
-                          type="checkbox"
-                          id={`group-${group.id}`}
-                          checked={isChecked}
-                          onChange={() => handleGroupAssignment(group.id)}
-                          className="sr-only"
-                        />
-                        <div
-                          onClick={() => handleGroupAssignment(group.id)}
-                          className={`w-5 h-5 border-2 rounded cursor-pointer flex items-center justify-center transition-all ${
-                            isChecked 
-                              ? "bg-blue-600 border-blue-600 text-white" 
-                              : "border-gray-300 hover:border-gray-400"
-                          }`}
-                        >
-                          {isChecked && <Check className="h-3 w-3" />}
+            {/* Camera Modal - Responsive Design */}
+            {showCamera && (
+              <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-2 sm:p-4 z-50">
+                <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden">
+                  <div className="p-4 sm:p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <Camera className="h-5 w-5 text-purple-600" />
+                        <h3 className="text-lg sm:text-xl font-semibold">Capture Business Cards</h3>
+                        {pendingCaptures.length > 0 && (
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                            {pendingCaptures.length} captured
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                          {isMobileDevice() ? <Smartphone className="h-3 w-3" /> : <Monitor className="h-3 w-3" />}
                         </div>
                       </div>
-                      <label 
-                        htmlFor={`group-${group.id}`} 
-                        className="text-sm cursor-pointer flex-1 select-none"
-                        onClick={() => handleGroupAssignment(group.id)}
-                      >
-                        {group.name}
-                      </label>
                     </div>
-                  );
-                })}
-              </div>
-              {groups.length === 0 && (
-                <p className="text-sm text-gray-500">
-                  No groups available. Create groups first to assign contacts.
-                </p>
-              )}
-              <div className="flex justify-end space-x-4">
-                <Button variant="outline" onClick={() => setShowGroupModal(false)}>
-                  Done
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
-      {/* Enhanced Template Selection Modal for WhatsApp Message */}
-      <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Send WhatsApp Message</DialogTitle>
-          </DialogHeader>
-          {selectedContactForMessage && (
-            <div className="space-y-6">
-              <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-primary font-medium">
-                    {getInitials(selectedContactForMessage.firstName, selectedContactForMessage.lastName)}
-                  </span>
-                </div>
-                <div>
-                  <p className="font-medium">{selectedContactForMessage.firstName} {selectedContactForMessage.lastName}</p>
-                  <p className="text-sm text-gray-500">{selectedContactForMessage.phone}</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Choose Message Option:</h3>
-                
-                {/* Template Selection */}
-                {templates.length > 0 && (
-                  <div className="space-y-3">
-                    <Label className="text-base font-medium">Use a Template:</Label>
-                    <div className="grid grid-cols-1 gap-3 max-h-60 overflow-y-auto">
-                      {templates.map(template => (
-                        <div
-                          key={template.id}
-                          className={`p-3 border rounded-lg cursor-pointer transition-all ${
-                            selectedTemplate?.id === template.id
-                              ? "border-blue-500 bg-blue-50"
-                              : "border-gray-200 hover:border-gray-300"
-                          }`}
-                          onClick={() => {
-                            setSelectedTemplate(template);
-                            setCustomMessage("");
-                          }}
+                    {cameraError ? (
+                      <div className="text-center py-8 sm:py-12">
+                        <CameraOff className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-4" />
+                        <p className="text-red-600 mb-4 text-sm sm:text-base">{cameraError}</p>
+                        <button 
+                          onClick={startCamera}
+                          className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base"
                         >
-                          <div className="flex items-start space-x-3">
-                            <FileText className="h-5 w-5 text-gray-400 mt-0.5" />
-                            <div className="flex-1">
-                              <p className="font-medium text-sm">{template.name}</p>
-                              <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                {replacePlaceholders(template.content, selectedContactForMessage).substring(0, 100)}...
-                              </p>
+                          <RotateCcw className="h-4 w-4 mr-2 inline" />
+                          Try Again
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="relative bg-black rounded-xl overflow-hidden">
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-64 sm:h-80 lg:h-96 object-cover"
+                          />
+                          {/* Camera overlay with responsive design */}
+                          <div className="absolute inset-0 pointer-events-none">
+                            <div className="absolute inset-2 sm:inset-4 border-2 border-white/50 rounded-lg">
+                              <ScanLine className="absolute top-1 left-1 sm:top-2 sm:left-2 h-4 w-4 sm:h-6 sm:w-6 text-white/75" />
+                              <div className="absolute top-1 sm:top-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs sm:text-sm font-medium">
+                                Position card within frame ({captureCount}/10)
+                              </div>
+                              {pendingCaptures.length > 0 && (
+                                <div className="absolute bottom-1 sm:bottom-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs">
+                                  {pendingCaptures.length} card{pendingCaptures.length > 1 ? 's' : ''} ready to process
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
-                      ))}
+                        
+                        {/* Pending captures preview - Mobile optimized */}
+                        {pendingCaptures.length > 0 && (
+                          <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+                            <h4 className="text-sm font-medium text-gray-900 mb-3">Captured Photos ({pendingCaptures.length})</h4>
+                            <div className="flex space-x-2 overflow-x-auto pb-2">
+                              {pendingCaptures.map((capture, index) => (
+                                <div key={capture.id} className="flex-shrink-0 relative">
+                                  <div className="w-12 h-8 sm:w-16 sm:h-10 bg-gray-200 rounded border-2 border-green-300 flex items-center justify-center">
+                                    <Camera className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+                                  </div>
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                    {index + 1}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {cameraMode === 'capture' ? (
+                          <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
+                            <button
+                              onClick={switchCamera}
+                              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1 sm:mr-2 inline" />
+                              Switch Camera
+                            </button>
+                            <button
+                              onClick={capturePhoto}
+                              className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 px-4 sm:px-8 py-2 text-white rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base font-medium"
+                              disabled={!cameraStream || captureCount >= 10}
+                            >
+                              <Camera className="h-4 w-4 mr-1 sm:mr-2 inline" />
+                              Capture ({captureCount}/10)
+                            </button>
+                            {pendingCaptures.length > 0 && (
+                              <>
+                                <button
+                                  onClick={processAllCaptures}
+                                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-4 sm:px-6 py-2 text-white rounded-lg transition-colors text-sm sm:text-base font-medium"
+                                >
+                                  <ArrowRight className="h-4 w-4 mr-1 sm:mr-2 inline" />
+                                  Process ({pendingCaptures.length})
+                                </button>
+                                <button
+                                  onClick={clearCaptures}
+                                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                  Clear
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={stopCamera}
+                              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Processing Captures</h3>
+                            <p className="text-gray-600 text-sm sm:text-base">Please wait while we extract contact information...</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hidden canvas for camera capture */}
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+      );
+    }
+
+    // Main component render for upload interface
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-4 px-4 sm:py-8">
+        {/* Component content is above in the main upload interface */}
+      </div>
+      );
+  }
+
+  // Main component render for upload interface
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-4 px-4 sm:py-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8">
+          <div className="flex items-center space-x-4 mb-6">
+            <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <Sparkles className="text-white h-7 w-7" />
+            </div>
+            <div>
+              <h2 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                AI Business Card Scanner
+              </h2>
+              <p className="text-gray-600 text-sm sm:text-lg mt-1">
+                Extract data from multiple business cards with advanced AI detection
+              </p>
+            </div>
+          </div>
+          
+          {/* AI Features Banner */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 rounded-xl border border-blue-200">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-blue-900 text-sm sm:text-base">AI-Powered</h3>
+                  <p className="text-xs sm:text-sm text-blue-700">Advanced OCR</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 rounded-xl border border-green-200">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <Camera className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-green-900 text-sm sm:text-base">Multi-Card</h3>
+                  <p className="text-xs sm:text-sm text-green-700">Batch process</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-3 sm:p-4 rounded-xl border border-purple-200">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <QrCode className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-purple-900 text-sm sm:text-base">QR Support</h3>
+                  <p className="text-xs sm:text-sm text-purple-700">vCard detect</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-3 sm:p-4 rounded-xl border border-amber-200">
+              <div className="flex items-center space-x-2 sm:space-x-3">
+                <CheckCircle2 className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600 flex-shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-amber-900 text-sm sm:text-base">Smart Check</h3>
+                  <p className="text-xs sm:text-sm text-amber-700">No duplicates</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Usage Status */}
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Zap className="h-5 w-5 text-blue-600" />
+                <div>
+                  <p className="font-medium text-blue-900 text-sm sm:text-base">
+                    {hasActiveSubscription ? 'Premium Plan Active' : 'Free Plan'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-blue-700">
+                    {hasActiveSubscription 
+                      ? 'Unlimited AI scans available' 
+                      : `${usage.aiScansCount}/${limits.aiScans} AI scans used`
+                    }
+                  </p>
+                </div>
+              </div>
+              {!canUseAIScan && (
+                <button className="px-3 py-1.5 text-xs sm:text-sm bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-colors">
+                  Upgrade Now
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Upload Zone */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-4 sm:p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <FileImage className="h-5 w-5 sm:h-6 sm:w-6" />
+                <h3 className="text-base sm:text-lg font-semibold">Smart Upload Zone</h3>
+              </div>
+              <div className="bg-white/20 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium">
+                {files.length > 0 ? `${files.length}/10 files` : 'Ready'}
+              </div>
+            </div>
+          </div>
+          
+          {/* Upload Area */}
+          <div 
+            className="p-6 sm:p-8 border-2 border-dashed border-purple-200 m-4 sm:m-6 rounded-2xl hover:border-purple-400 transition-all duration-300 hover:bg-purple-50/50"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (canUseAIScan) {
+                handleFileSelect(e.dataTransfer.files);
+              }
+            }}
+          >
+            <div className="text-center">
+              <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mb-4 sm:mb-6">
+                <CloudUpload className="text-purple-600 h-8 w-8 sm:h-10 sm:w-10" />
+              </div>
+              <h3 className="text-lg sm:text-2xl font-bold text-gray-900 mb-4">Drop Your Business Cards Here</h3>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center">
+                <button 
+                  onClick={() => {
+                    if (canUseAIScan) {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.multiple = true;
+                      input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                      input.onchange = (e) => {
+                        const files = (e.target as HTMLInputElement).files;
+                        if (files) handleFileSelect(files);
+                      };
+                      input.click();
+                    }
+                  }}
+                  disabled={processing}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50 transition-colors text-sm sm:text-base"
+                >
+                  <CloudUpload className="h-4 w-4 sm:h-5 sm:w-5 mr-2 inline" />
+                  {processing ? 'Processing...' : 'Choose Files'}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    if (canUseAIScan) {
+                      setShowCamera(true);
+                      startCamera();
+                    }
+                  }}
+                  disabled={processing}
+                  className="border-2 border-purple-300 text-purple-600 hover:bg-purple-50 px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl font-semibold transition-colors text-sm sm:text-base"
+                >
+                  <Camera className="h-4 w-4 sm:h-5 sm:w-5 mr-2 inline" />
+                  Use Camera
+                </button>
+              </div>
+              
+              <div className="mt-4 text-center">
+                <p className="text-sm text-gray-500">Or drag and drop files</p>
+                <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB each • Max 10 files</p>
+                <p className="text-xs text-purple-600 mt-1 flex items-center justify-center">
+                  <QrCode className="h-3 w-3 mr-1" />
+                  QR codes automatically detected
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Selected Files - Enhanced Display */}
+        {files.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-xl overflow-hidden mb-6">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 sm:p-6 text-white">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <FileText className="h-5 w-5 sm:h-6 sm:w-6" />
+                  <h3 className="text-base sm:text-lg font-semibold">Selected Files ({files.length})</h3>
+                </div>
+                <div className="text-xs sm:text-sm opacity-90">
+                  Ready for processing
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 sm:p-6">
+              {/* File Grid - Enhanced for Mobile */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+                {files.slice(0, 6).map((file, index) => (
+                  <div key={index} className="relative group">
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border-2 border-gray-200 hover:border-purple-300 transition-all">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center flex-1 min-w-0">
+                          <ImageIcon className="h-5 w-5 text-gray-500 mr-2 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeFile(index)}
+                          disabled={processing}
+                          className="ml-2 p-1 text-red-500 hover:bg-red-50 rounded-full transition-colors flex-shrink-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      {file.name.includes('camera-capture') && (
+                        <div className="flex items-center space-x-1">
+                          <Camera className="h-3 w-3 text-green-600" />
+                          <span className="text-xs text-green-600 font-medium">Camera</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {files.length > 6 && (
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border-2 border-purple-200 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-purple-900">+{files.length - 6} more</p>
+                      <p className="text-xs text-purple-700">files ready</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Compact Process Button */}
+              <button
+                onClick={processFiles}
+                disabled={processing || files.length === 0}
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50 transition-colors flex items-center justify-center text-sm sm:text-base"
+              >
+                {processing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                    Process {files.length} with AI
+                  </>
+                )}
+              </button>
+              
+              {/* Compact Progress Bar */}
+              {processing && (
+                <div className="mt-4 space-y-2">
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-purple-600 to-pink-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-600">
+                    <span>{Math.round(progress)}% complete</span>
+                    {currentFile && <span className="truncate ml-2">{currentFile}</span>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Camera Modal - Responsive Design */}
+        {showCamera && (
+          <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center p-2 sm:p-4 z-50">
+            <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden">
+              <div className="p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-2">
+                    <Camera className="h-5 w-5 text-purple-600" />
+                    <h3 className="text-lg sm:text-xl font-semibold">Capture Business Cards</h3>
+                    {pendingCaptures.length > 0 && (
+                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {pendingCaptures.length} captured
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+                      {isMobileDevice() ? <Smartphone className="h-3 w-3" /> : <Monitor className="h-3 w-3" />}
+                    </div>
+                  </div>
+                </div>
+
+                {cameraError ? (
+                  <div className="text-center py-8 sm:py-12">
+                    <CameraOff className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-red-600 mb-4 text-sm sm:text-base">{cameraError}</p>
+                    <button 
+                      onClick={startCamera}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2 inline" />
+                      Try Again
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative bg-black rounded-xl overflow-hidden">
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-64 sm:h-80 lg:h-96 object-cover"
+                      />
+                      {/* Camera overlay with responsive design */}
+                      <div className="absolute inset-0 pointer-events-none">
+                        <div className="absolute inset-2 sm:inset-4 border-2 border-white/50 rounded-lg">
+                          <ScanLine className="absolute top-1 left-1 sm:top-2 sm:left-2 h-4 w-4 sm:h-6 sm:w-6 text-white/75" />
+                          <div className="absolute top-1 sm:top-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs sm:text-sm font-medium">
+                            Position card within frame ({captureCount}/10)
+                          </div>
+                          {pendingCaptures.length > 0 && (
+                            <div className="absolute bottom-1 sm:bottom-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs">
+                              {pendingCaptures.length} card{pendingCaptures.length > 1 ? 's' : ''} ready to process
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     
-                    {selectedTemplate && (
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-sm font-medium text-blue-800">Preview:</Label>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              const previewText = replacePlaceholders(selectedTemplate.content, selectedContactForMessage);
-                              copyMessageToClipboard(previewText);
-                            }}
-                            className="h-6 px-2 text-blue-600 hover:text-blue-700"
-                          >
-                            <Copy className="h-3 w-3 mr-1" />
-                            Copy
-                          </Button>
+                    {/* Pending captures preview - Mobile optimized */}
+                    {pendingCaptures.length > 0 && (
+                      <div className="bg-gray-50 rounded-xl p-3 sm:p-4">
+                        <h4 className="text-sm font-medium text-gray-900 mb-3">Captured Photos ({pendingCaptures.length})</h4>
+                        <div className="flex space-x-2 overflow-x-auto pb-2">
+                          {pendingCaptures.map((capture, index) => (
+                            <div key={capture.id} className="flex-shrink-0 relative">
+                              <div className="w-12 h-8 sm:w-16 sm:h-10 bg-gray-200 rounded border-2 border-green-300 flex items-center justify-center">
+                                <Camera className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+                              </div>
+                              <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                {index + 1}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        <p className="text-sm text-blue-700 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                          {replacePlaceholders(selectedTemplate.content, selectedContactForMessage)}
-                        </p>
+                      </div>
+                    )}
+                    
+                    {cameraMode === 'capture' ? (
+                      <div className="flex flex-wrap justify-center gap-2 sm:gap-4">
+                        <button
+                          onClick={switchCamera}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1 sm:mr-2 inline" />
+                          Switch Camera
+                        </button>
+                        <button
+                          onClick={capturePhoto}
+                          className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 px-4 sm:px-8 py-2 text-white rounded-lg transition-colors disabled:opacity-50 text-sm sm:text-base font-medium"
+                          disabled={!cameraStream || captureCount >= 10}
+                        >
+                          <Camera className="h-4 w-4 mr-1 sm:mr-2 inline" />
+                          Capture ({captureCount}/10)
+                        </button>
+                        {pendingCaptures.length > 0 && (
+                          <>
+                            <button
+                              onClick={processAllCaptures}
+                              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-4 sm:px-6 py-2 text-white rounded-lg transition-colors text-sm sm:text-base font-medium"
+                            >
+                              <ArrowRight className="h-4 w-4 mr-1 sm:mr-2 inline" />
+                              Process ({pendingCaptures.length})
+                            </button>
+                            <button
+                              onClick={clearCaptures}
+                              className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                              Clear
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={stopCamera}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Processing Captures</h3>
+                        <p className="text-gray-600 text-sm sm:text-base">Please wait while we extract contact information...</p>
                       </div>
                     )}
                   </div>
                 )}
-
-                {/* Custom Message */}
-                <div className="space-y-3">
-                  <Label className="text-base font-medium">
-                    {templates.length > 0 ? "Or Write Custom Message:" : "Write Custom Message:"}
-                  </Label>
-                  <Textarea
-                    value={customMessage}
-                    onChange={(e) => {
-                      setCustomMessage(e.target.value);
-                      setSelectedTemplate(null);
-                    }}
-                    placeholder="Write your custom message here... 
-
-You can use placeholders:
-{firstName} - Contact's first name
-{lastName} - Contact's last name  
-{fullName} - Contact's full name
-{company} - Contact's company
-{email} - Contact's email
-{phone} - Contact's phone"
-                    rows={6}
-                    className="resize-none"
-                  />
-                  
-                  {customMessage.trim() && (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="text-sm font-medium text-green-800">Preview:</Label>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const previewText = replacePlaceholders(customMessage, selectedContactForMessage);
-                            copyMessageToClipboard(previewText);
-                          }}
-                          className="h-6 px-2 text-green-600 hover:text-green-700"
-                        >
-                          <Copy className="h-3 w-3 mr-1" />
-                          Copy
-                        </Button>
-                      </div>
-                      <p className="text-sm text-green-700 whitespace-pre-wrap max-h-32 overflow-y-auto">
-                        {replacePlaceholders(customMessage, selectedContactForMessage)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Placeholder Help */}
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <p className="text-xs text-gray-600">
-                    <strong>Available placeholders:</strong> {"{firstName}"}, {"{lastName}"}, {"{fullName}"}, {"{company}"}, {"{email}"}, {"{phone}"}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Note: Very long messages may be copied to clipboard instead of pre-filled in WhatsApp.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-4">
-                <Button variant="outline" onClick={() => setShowTemplateModal(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleSendWhatsAppMessage}
-                  disabled={!selectedTemplate && !customMessage.trim()}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <WhatsAppIcon className="h-4 w-4 mr-2" />
-                  Send via WhatsApp
-                </Button>
               </div>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        )}
+      </div>
+
+      {/* Hidden canvas for camera capture */}
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
-
-export default Contacts;
-
-
-
-contacts

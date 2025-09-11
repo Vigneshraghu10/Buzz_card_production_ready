@@ -1,30 +1,27 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { 
-  collection, query, where, getDocs, orderBy, limit, getCountFromServer, doc, getDoc 
+  collection, query, where, getDocs, orderBy, limit, getCountFromServer 
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, Lock, CreditCard } from "lucide-react";
+import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, CreditCard, Crown, Shield } from "lucide-react";
 import { useLocation } from "wouter";
-import PricingSection from "@/components/PricingSection";
 
 interface Stats {
   contactsCount: number;
   groupsCount: number;
   templatesCount: number;
+  scannedCardsCount: number;
   digitalCardsCount: number;
 }
 
-interface UserSubscription {
-  planId: string;
-  planName: string;
-  status: 'active' | 'expired' | 'cancelled';
-  startDate: any;
-  expiryDate: any;
-  paymentId?: string;
-  orderId?: string;
+interface SubscriptionStatus {
+  hasSubscription: boolean;
+  planName?: string;
+  endDate?: Date;
+  isActive?: boolean;
 }
 
 interface RecentActivity {
@@ -41,38 +38,21 @@ export default function Dashboard() {
     contactsCount: 0,
     groupsCount: 0,
     templatesCount: 0,
+    scannedCardsCount: 0,
     digitalCardsCount: 0,
+  });
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus>({
+    hasSubscription: false
   });
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [, setLocation] = useLocation();
-  const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null);
-  const [showPricing, setShowPricing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
 
     const fetchStats = async () => {
       try {
-        // Check user subscription status
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          const subscription = userData.subscription;
-          setUserSubscription(subscription);
-          
-          // Check if subscription is active
-          const hasActiveSubscription = subscription && 
-            subscription.status === 'active' && 
-            new Date() < new Date(subscription.expiryDate?.toDate?.() || subscription.expiryDate);
-          
-          if (!hasActiveSubscription) {
-            setShowPricing(true);
-          }
-        } else {
-          setShowPricing(true);
-        }
-
         // Fetch counts for all collections
         const collections = ["contacts", "groups", "templates", "digitalCards"];
         const counts = await Promise.all(
@@ -84,12 +64,40 @@ export default function Dashboard() {
           })
         );
 
+        // Get scanned cards count from contacts where source is business card scan
+        const scannedCardsQuery = query(
+          collection(db, "contacts"),
+          where("ownerId", "==", user.uid),
+          where("source", "in", ["business_card_scan", "bulk_scan"])
+        );
+        const scannedCardsSnapshot = await getCountFromServer(scannedCardsQuery);
+        const scannedCardsCount = scannedCardsSnapshot.data().count;
+
         setStats({
           contactsCount: counts[0],
           groupsCount: counts[1],
           templatesCount: counts[2],
           digitalCardsCount: counts[3],
+          scannedCardsCount: scannedCardsCount,
         });
+
+        // Fetch subscription status
+        try {
+          const subscriptionResponse = await fetch(`/api/subscription/${user.uid}`);
+          if (subscriptionResponse.ok) {
+            const subscription = await subscriptionResponse.json();
+            if (subscription) {
+              setSubscriptionStatus({
+                hasSubscription: true,
+                planName: subscription.planId === 'basic_yearly' ? 'Basic Plan' : 'Premium Plan',
+                endDate: new Date(subscription.endDate),
+                isActive: subscription.isActive
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching subscription:", error);
+        }
 
         // Fetch recent activities from contacts with source information
         const recentContactsQuery = query(
@@ -106,31 +114,30 @@ export default function Dashboard() {
           const data = doc.data();
           const timestamp = data.createdAt?.toDate() || new Date();
           const source = data.source || 'manual';
-          const contactName = `${data.name || data.firstName || ''} ${data.lastName || ''}`.trim() || 'Unknown Contact';
           
           if (source === 'business_card_scan') {
             activities.push({
               id: doc.id,
               type: 'scan',
-              description: `Scanned business card: ${contactName}`,
+              description: `Scanned business card for ${data.firstName} ${data.lastName}`.trim(),
               timestamp,
-              details: data.company ? `Company: ${data.company}` : `Email: ${data.email || 'Not provided'}`
+              details: data.company ? `Company: ${data.company}` : undefined
             });
           } else if (source === 'bulk_scan') {
             activities.push({
               id: doc.id,
               type: 'bulk_scan',
-              description: `AI bulk scan: ${contactName}`,
+              description: `Bulk scanned card for ${data.firstName} ${data.lastName}`.trim(),
               timestamp,
-              details: data.company ? `Company: ${data.company}` : `Phone: ${data.phones?.[0] || 'Not provided'}`
+              details: data.company ? `Company: ${data.company}` : undefined
             });
           } else if (source === 'manual' || !source) {
             activities.push({
               id: doc.id,
               type: 'contact_add',
-              description: `Added contact: ${contactName}`,
+              description: `Added contact ${data.firstName} ${data.lastName}`.trim(),
               timestamp,
-              details: data.company ? `Company: ${data.company}` : `Email: ${data.email || 'Not provided'}`
+              details: data.company ? `Company: ${data.company}` : undefined
             });
           }
         });
@@ -149,22 +156,11 @@ export default function Dashboard() {
     fetchStats();
   }, [user]);
 
-  // Check if user has active subscription
-  const hasActiveSubscription = userSubscription && 
-    userSubscription.status === 'active' && 
-    new Date() < new Date(userSubscription.expiryDate?.toDate?.() || userSubscription.expiryDate);
-
   const statsCards = [
     { name: "Total Contacts", count: stats.contactsCount, icon: Users, color: "from-blue-500 to-blue-600" },
     { name: "Groups", count: stats.groupsCount, icon: Layers, color: "from-green-500 to-green-600" },
     { name: "Digital Cards", count: stats.digitalCardsCount, icon: CreditCard, color: "from-purple-500 to-purple-600" },
-    { 
-      name: "Subscription", 
-      count: hasActiveSubscription ? "Active" : "None", 
-      icon: Lock, 
-      color: hasActiveSubscription ? "from-green-500 to-green-600" : "from-gray-400 to-gray-500",
-      isSubscription: true
-    },
+    { name: "AI Processed Cards", count: stats.scannedCardsCount, icon: Camera, color: "from-indigo-500 to-indigo-600" },
   ];
 
   const quickActions = [
@@ -173,28 +169,28 @@ export default function Dashboard() {
       description: "Create a new contact entry", 
       icon: UserPlus, 
       color: "from-blue-50 to-blue-100 text-blue-600 border-blue-200", 
-      action: () => setLocation("/contacts")
+      action: () => setLocation("/contacts") 
     },
     { 
       name: "Create Template", 
       description: "Design a new message template", 
       icon: FilePlus, 
       color: "from-yellow-50 to-yellow-100 text-yellow-600 border-yellow-200", 
-      action: () => setLocation("/templates")
+      action: () => setLocation("/templates") 
     },
     { 
-      name: "AI Card Scanner", 
+      name: "Bulk Upload", 
       description: "Upload multiple business cards", 
-      icon: Camera, 
+      icon: CloudUpload, 
       color: "from-green-50 to-green-100 text-green-600 border-green-200", 
-      action: () => setLocation("/bulk-uploads")
+      action: () => setLocation("/bulk-uploads") 
     },
     { 
-      name: "Digital Card", 
-      description: "Create your digital business card", 
+      name: "Digital Cards", 
+      description: "Create and share smart cards.", 
       icon: CreditCard, 
       color: "from-purple-50 to-purple-100 text-purple-600 border-purple-200", 
-      action: () => setLocation("/digital-card")
+      action: () => setLocation("/digital-card") 
     },
   ];
 
@@ -338,6 +334,64 @@ export default function Dashboard() {
         </h1>
       </div>
 
+      {/* Subscription Status Card */}
+      {subscriptionStatus.hasSubscription ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
+          <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
+                    <Shield className="text-white h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-green-800">Active Subscription</h3>
+                    <p className="text-sm text-green-600">
+                      {subscriptionStatus.planName} • Valid until {subscriptionStatus.endDate?.toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  className="border-green-300 text-green-700 hover:bg-green-100"
+                  onClick={() => setLocation("/pricing")}
+                >
+                  <Crown className="h-4 w-4 mr-2" />
+                  Manage
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
+          <Card className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200 shadow-lg">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
+                    <Crown className="text-white h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-amber-800">Free Plan</h3>
+                    <p className="text-sm text-amber-600">
+                      Upgrade to unlock unlimited features and AI processing
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                  onClick={() => setLocation("/pricing")}
+                >
+                  <Crown className="h-4 w-4 mr-2" />
+                  Upgrade Now
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Stats Cards */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-8">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -366,18 +420,7 @@ export default function Dashboard() {
                             animationFillMode: 'both'
                           }}
                         >
-                          {card.isSubscription ? (
-                            <span className={`text-lg ${hasActiveSubscription ? 'text-green-600' : 'text-gray-500'}`}>
-                              {card.count}
-                              {hasActiveSubscription && userSubscription && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Expires: {new Date(userSubscription.expiryDate?.toDate?.() || userSubscription.expiryDate).toLocaleDateString()}
-                                </div>
-                              )}
-                            </span>
-                          ) : (
-                            card.count
-                          )}
+                          {card.count}
                         </p>
                       </div>
                     </div>
@@ -427,7 +470,7 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Activities */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-12">
+      {/* <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 mt-12">
         <h3 
           className="text-xl font-semibold text-gray-900 mb-6 flex items-center animate-slideInUp"
           style={{ animationDelay: '1600ms', animationFillMode: 'both' }}
@@ -493,8 +536,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-      </div>
-
+      </div> */}
     </div>
   );
 }
