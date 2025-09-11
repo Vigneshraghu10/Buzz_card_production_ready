@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { buildVCard } from "@/utils/vcard";
+import { generateQrFromText } from "@/utils/qr";
 import { 
   CreditCard, Search, Edit, Download, Share2, Trash2, 
-  Plus, Eye, Calendar, Building2, User, Globe
+  Plus, Eye, Calendar, Building2, User, Globe, FileText, QrCode
 } from "lucide-react";
 
 interface DigitalCard {
@@ -48,6 +50,7 @@ export default function ManageDigitalCards() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredCards, setFilteredCards] = useState<DigitalCard[]>([]);
+  const [downloadingCards, setDownloadingCards] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -139,6 +142,104 @@ export default function ManageDigitalCards() {
       title: "Link Copied",
       description: "Share link copied to clipboard",
     });
+  };
+
+  const handleDownloadVCard = async (card: DigitalCard) => {
+    try {
+      setDownloadingCards(prev => new Set(prev).add(card.id));
+      
+      // Generate vCard content
+      const vCardContent = buildVCard({
+        firstName: card.firstName,
+        lastName: card.lastName,
+        title: card.title,
+        company: card.company,
+        email: card.email,
+        phone: card.phone,
+        website: card.website,
+        address: card.address
+      });
+      
+      // Create blob and download
+      const blob = new Blob([vCardContent], { type: 'text/vcard;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${card.firstName || 'Contact'}_${card.lastName || 'Card'}.vcf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Download Complete",
+        description: "vCard file downloaded successfully",
+      });
+    } catch (error) {
+      console.error("Error downloading vCard:", error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to download vCard file",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingCards(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(card.id);
+        return newSet;
+      });
+    }
+  };
+
+  const handleDownloadQR = async (card: DigitalCard) => {
+    try {
+      setDownloadingCards(prev => new Set(prev).add(card.id));
+      
+      // Generate vCard content for QR code
+      const vCardContent = buildVCard({
+        firstName: card.firstName,
+        lastName: card.lastName,
+        title: card.title,
+        company: card.company,
+        email: card.email,
+        phone: card.phone,
+        website: card.website,
+        address: card.address
+      });
+      
+      // Generate QR code with company logo if available
+      const qrDataUrl = await generateQrFromText(vCardContent, card.companyLogoUrl);
+      
+      // Convert data URL to blob and download
+      const response = await fetch(qrDataUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${card.firstName || 'Contact'}_${card.lastName || 'Card'}_QR.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast({
+        title: "Download Complete",
+        description: "QR code image downloaded successfully",
+      });
+    } catch (error) {
+      console.error("Error downloading QR code:", error);
+      toast({
+        title: "Download Failed",
+        description: "Failed to download QR code image",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingCards(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(card.id);
+        return newSet;
+      });
+    }
   };
 
   const formatDate = (timestamp: any) => {
@@ -300,34 +401,71 @@ export default function ManageDigitalCards() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex space-x-2 pt-3">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleEdit(card.id)}
-                      className="flex-1"
-                      data-testid={`button-edit-${card.id}`}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleShare(card.publicId)}
-                      data-testid={`button-share-${card.id}`}
-                    >
-                      <Share2 className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => handleDelete(card.id, `${card.firstName || ''} ${card.lastName || 'Unknown'}`)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      data-testid={`button-delete-${card.id}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                  <div className="space-y-2 pt-3">
+                    {/* Primary Actions Row */}
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleEdit(card.id)}
+                        className="flex-1"
+                        data-testid={`button-edit-${card.id}`}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleShare(card.publicId)}
+                        data-testid={`button-share-${card.id}`}
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDelete(card.id, `${card.firstName || ''} ${card.lastName || 'Unknown'}`)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        data-testid={`button-delete-${card.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* Download Actions Row */}
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDownloadVCard(card)}
+                        className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
+                        disabled={downloadingCards.has(card.id)}
+                        data-testid={`button-download-vcard-${card.id}`}
+                      >
+                        {downloadingCards.has(card.id) ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-1"></div>
+                        ) : (
+                          <FileText className="h-4 w-4 mr-1" />
+                        )}
+                        vCard
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDownloadQR(card)}
+                        className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        disabled={downloadingCards.has(card.id)}
+                        data-testid={`button-download-qr-${card.id}`}
+                      >
+                        {downloadingCards.has(card.id) ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-1"></div>
+                        ) : (
+                          <QrCode className="h-4 w-4 mr-1" />
+                        )}
+                        QR Code
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
