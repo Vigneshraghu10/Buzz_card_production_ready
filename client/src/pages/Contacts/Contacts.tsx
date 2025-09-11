@@ -33,6 +33,7 @@ interface Contact {
   company: string;
   services: string;
   address?: string;
+  website?: string; // Website URL field
   qrCodeUrl?: string; // Added QR Code URL field
   groupIds: string[];
   createdAt: Date;
@@ -87,6 +88,7 @@ function Contacts() {
     company: string;
     services: string;
     address: string;
+    website: string; // Website URL field
     qrCodeUrl: string; // Added QR Code URL field
     groupIds: string[];
   }>({
@@ -97,6 +99,7 @@ function Contacts() {
     company: "",
     services: "",
     address: "",
+    website: "", // Website URL field
     qrCodeUrl: "", // Added QR Code URL field
     groupIds: [],
   });
@@ -132,7 +135,8 @@ function Contacts() {
         contact.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         contact.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         contact.phones?.some(p => p.includes(searchTerm)) ||
-        contact.company?.toLowerCase().includes(searchTerm.toLowerCase())
+        contact.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        contact.website?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -169,6 +173,7 @@ function Contacts() {
           company: data.company || "",
           services: data.services || "",
           address: data.address || "",
+          website: data.website || "", // Website URL field
           qrCodeUrl: data.qrCodeUrl || "", // Added QR Code URL field
           groupIds: data.groupIds || [],
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -271,7 +276,8 @@ function Contacts() {
           
           const email = row['Email'] || row['email'] || row['Email Address'] || '';
           const company = row['Company'] || row['company'] || row['Organization'] || '';
-          const qrCodeUrl = row['QR Code URL'] || row['qrCodeUrl'] || row['QR Code'] || row['URL'] || ''; // Added QR Code URL extraction
+          const website = row['Website'] || row['website'] || row['Web Site'] || row['URL'] || ''; // Website URL extraction
+          const qrCodeUrl = row['QR Code URL'] || row['qrCodeUrl'] || row['QR Code'] || ''; // Added QR Code URL extraction
 
           return {
             index: index + 1,
@@ -282,6 +288,7 @@ function Contacts() {
             company: company.toString().trim(),
             services: row['Services'] || row['services'] || '',
             address: row['Address'] || row['address'] || '',
+            website: website.toString().trim(), // Website URL field
             qrCodeUrl: qrCodeUrl.toString().trim(), // Added QR Code URL field
             isValid: !!(firstName && phones.length > 0) // Minimum required fields
           };
@@ -329,6 +336,7 @@ function Contacts() {
             company: contact.company,
             services: contact.services || '',
             address: contact.address || '',
+            website: contact.website || '', // Website URL field
             qrCodeUrl: contact.qrCodeUrl || '', // Added QR Code URL field
             groupIds: [],
             ownerId: user.uid,
@@ -395,6 +403,7 @@ function Contacts() {
           'Company': contact.company || '',
           'Services': contact.services || '',
           'Address': contact.address || '',
+          'Website': contact.website || '', // Website URL field
           'QR Code URL': contact.qrCodeUrl || '', // Added QR Code URL field
           'Groups': groupNames,
           'Created Date': contact.createdAt ? contact.createdAt.toLocaleDateString() : '',
@@ -448,6 +457,7 @@ function Contacts() {
       contact.company ? `ORG:${contact.company}` : '',
       contact.address ? `ADR;TYPE=WORK:;;${contact.address};;;;` : '',
       contact.services ? `NOTE:Services: ${contact.services}` : '',
+      contact.website ? `URL:${contact.website}` : '', // Website URL
       contact.qrCodeUrl ? `URL:${contact.qrCodeUrl}` : '', // Added QR Code URL to VCF
       'END:VCARD'
     ].filter(Boolean).join('\n');
@@ -546,6 +556,7 @@ function Contacts() {
           company: formData.company.trim(),
           services: formData.services.trim(),
           address: formData.address.trim(),
+          website: formData.website.trim(), // Website URL field
           qrCodeUrl: formData.qrCodeUrl.trim(), // Added QR Code URL field
           groupIds: formData.groupIds || [],
           ownerId: user.uid,
@@ -571,6 +582,7 @@ function Contacts() {
         company: "",
         services: "",
         address: "",
+        website: "", // Website URL field
         qrCodeUrl: "", // Added QR Code URL field
         groupIds: [],
       });
@@ -598,6 +610,7 @@ function Contacts() {
       company: contact.company || "",
       services: contact.services || "",
       address: contact.address || "",
+      website: contact.website || "", // Website URL field
       qrCodeUrl: contact.qrCodeUrl || "", // Added QR Code URL field
       groupIds: contact.groupIds || [],
     });
@@ -858,6 +871,7 @@ function Contacts() {
       company: "",
       services: "",
       address: "",
+      website: "", // Website URL field
       qrCodeUrl: "", // Added QR Code URL field
       groupIds: [],
     });
@@ -876,6 +890,7 @@ function Contacts() {
       company: "",
       services: "",
       address: "",
+      website: "", // Website URL field
       qrCodeUrl: "", // Added QR Code URL field
       groupIds: [],
     });
@@ -1394,6 +1409,18 @@ function Contacts() {
                       onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
                       rows={2}
                       disabled={saving}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="website">Website (Optional)</Label>
+                    <Input
+                      id="website"
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
+                      placeholder="https://example.com"
+                      disabled={saving}
+                      data-testid="input-website"
                     />
                   </div>
                   <div>
