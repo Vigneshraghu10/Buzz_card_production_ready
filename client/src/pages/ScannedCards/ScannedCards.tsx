@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, addDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { callGeminiAPI } from "@/utils/ocr";
 import type { ParsedContact } from "@/utils/parse";
+import { isDuplicateContact } from "@/utils/duplicate";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -176,10 +177,10 @@ export default function ScannedCards() {
       message = message.replace(/\{\{name\}\}/g, contactData.name || 'there');
       message = message.replace(/\{\{company\}\}/g, contactData.company || '');
       message = message.replace(/\{\{email\}\}/g, contactData.email || '');
-      message = message.replace(/\{\{phone\}\}/g, contactData.phone || '');
+      message = message.replace(/\{\{phone\}\}/g, contactData.phones?.[0] || '');
 
       // Create WhatsApp URL
-      const phoneNumber = contactData.phone?.replace(/\D/g, '') || '';
+      const phoneNumber = contactData.phones?.[0]?.replace(/\D/g, '') || '';
       const encodedMessage = encodeURIComponent(message);
       const whatsappUrl = phoneNumber 
         ? `https://wa.me/${phoneNumber}?text=${encodedMessage}`
@@ -219,23 +220,59 @@ export default function ScannedCards() {
     setSavingContact(true);
     
     try {
-      // Save contact to Firestore
+      // Build phones array for duplicate checking  
+      const phones = contactData.phones || [];
+      
+      // Check for duplicates
+      if (contactData.email || phones.length) {
+        const isDupe = await isDuplicateContact(
+          user.uid, 
+          contactData.email, 
+          phones
+        );
+        if (isDupe) {
+          toast({
+            title: "Duplicate Contact",
+            description: `${contactData.name || 'Contact'} already exists`,
+            variant: "destructive",
+          });
+          setSavingContact(false);
+          return;
+        }
+      }
+
+      // Extract QR code URL if available
+      const qrCodeUrl = contactData.qrCodes?.find(qr => qr.type === 'url')?.data || "";
+      const extractedWebsite = contactData.website || qrCodeUrl || "";
+
+      // Save contact to Firestore with proper field mapping
       await addDoc(collection(db, "contacts"), {
-        ...contactData,
+        firstName: contactData.name?.split(' ')[0] || "",
+        lastName: contactData.name?.split(' ').slice(1).join(' ') || "",
+        phone: contactData.phones?.[0] || "",
+        phones: contactData.phones || [],
+        email: contactData.email?.toLowerCase() || "",
+        company: contactData.company || "",
+        services: contactData.services || "",
+        address: contactData.address || "",
+        website: extractedWebsite,
+        qrCodeUrl: qrCodeUrl,
+        groupIds: [],
         ownerId: user.uid,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        source: "business_card_scan"
+        createdAt: serverTimestamp(),
+        source: "business_card_scan",
+        hasQRData: !!(contactData.qrCodes && contactData.qrCodes.length > 0),
+        qrContent: contactData.qrCodes?.[0]?.data || null,
       });
 
       toast({
-        title: "Success",
-        description: "Contact saved successfully",
+        title: "Contact Saved",
+        description: `${contactData.name || 'Contact'} has been saved successfully`,
       });
     } catch (error) {
       console.error("Error saving contact:", error);
       toast({
-        title: "Error",
+        title: "Save Failed",
         description: "Failed to save contact",
         variant: "destructive",
       });
@@ -267,7 +304,7 @@ export default function ScannedCards() {
 
   const handleWhatsAppMessage = () => {
     const contactData = isEditing ? editData : extractedData?.data;
-    if (!contactData?.phone) {
+    if (!contactData?.phones?.[0]) {
       toast({
         title: "Error",
         description: "No phone number available",
@@ -277,7 +314,7 @@ export default function ScannedCards() {
     }
     
     try {
-      const phoneNumber = contactData.phone.replace(/\D/g, '');
+      const phoneNumber = contactData.phones?.[0]?.replace(/\D/g, '') || '';
       const whatsappUrl = `https://wa.me/${phoneNumber}`;
       window.open(whatsappUrl, '_blank');
       
