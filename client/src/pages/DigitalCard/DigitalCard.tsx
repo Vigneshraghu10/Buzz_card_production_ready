@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, getDoc } from "firebase/firestore";
+import { useLocation } from "wouter";
 import { db } from "@/lib/firebase";
 import { uploadToStorage } from "@/utils/upload";
 import { buildVCard } from "@/utils/vcard";
@@ -147,12 +148,15 @@ export default function AdvancedDigitalCard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { usage, limits, canAddDigitalCard, refreshUsage } = useUsageLimits();
+  const [location, navigate] = useLocation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editCardId, setEditCardId] = useState<string>("");
   const [digitalCard, setDigitalCard] = useState<DigitalCard>({
     ownerId: user?.uid || "",
     publicId: "",
@@ -177,8 +181,21 @@ export default function AdvancedDigitalCard() {
 
   useEffect(() => {
     if (!user) return;
-    fetchDigitalCard();
-  }, [user]);
+    
+    // Parse URL query parameters
+    const urlParams = new URLSearchParams(location.split('?')[1] || '');
+    const editId = urlParams.get('edit');
+    
+    if (editId) {
+      setIsEditMode(true);
+      setEditCardId(editId);
+      fetchCardForEdit(editId);
+    } else {
+      setIsEditMode(false);
+      setEditCardId('');
+      fetchDigitalCard();
+    }
+  }, [user, location]);
 
   useEffect(() => {
     if (digitalCard.firstName || digitalCard.lastName) {
@@ -210,6 +227,52 @@ export default function AdvancedDigitalCard() {
         description: "Failed to fetch digital card",
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCardForEdit = async (cardId: string) => {
+    try {
+      const cardRef = doc(db, "digitalCards", cardId);
+      const cardSnap = await getDoc(cardRef);
+      
+      if (cardSnap.exists()) {
+        const cardData = cardSnap.data();
+        
+        // Verify ownership
+        if (cardData.ownerId !== user!.uid) {
+          toast({
+            title: "Access Denied",
+            description: "You don't have permission to edit this card",
+            variant: "destructive",
+          });
+          navigate("/manage-cards");
+          return;
+        }
+        
+        setDigitalCard({
+          id: cardSnap.id,
+          ...cardData,
+          qrEnabled: cardData.qrEnabled ?? true,
+          updatedAt: cardData.updatedAt?.toDate() || new Date(),
+        } as DigitalCard);
+      } else {
+        toast({
+          title: "Card Not Found",
+          description: "The digital card you're trying to edit doesn't exist",
+          variant: "destructive",
+        });
+        navigate("/manage-cards");
+      }
+    } catch (error) {
+      console.error("Error fetching card for edit:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch card for editing",
+        variant: "destructive",
+      });
+      navigate("/manage-cards");
     } finally {
       setLoading(false);
     }
@@ -345,8 +408,13 @@ export default function AdvancedDigitalCard() {
 
       toast({
         title: "Success",
-        description: "Digital card saved successfully",
+        description: isEditMode ? "Digital card updated successfully" : "Digital card saved successfully",
       });
+
+      // Redirect to manage cards after editing
+      if (isEditMode) {
+        navigate("/manage-cards");
+      }
     } catch (error) {
       console.error("Error saving digital card:", error);
       toast({
