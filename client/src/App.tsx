@@ -18,6 +18,7 @@ import Groups from "@/pages/Groups/Groups";
 import Templates from "@/pages/Templates/Templates";
 import EnhancedBulkUploads from "@/pages/BulkUploads/EnhancedBulkUploads";
 import DigitalCard from "@/pages/DigitalCard/DigitalCard";
+import ManageDigitalCards from "@/pages/ManageDigitalCards/ManageDigitalCards";
 import Settings from "@/pages/Settings/Settings";
 import NFCCard from "@/pages/NFCCard/NFCCard";
 import Pricing from "@/pages/Pricing/Pricing";
@@ -79,6 +80,14 @@ function Router() {
         <PrivateRoute>
           <Layout>
             <DigitalCard />
+          </Layout>
+        </PrivateRoute>
+      </Route>
+
+      <Route path="/manage-cards">
+        <PrivateRoute>
+          <Layout>
+            <ManageDigitalCards />
           </Layout>
         </PrivateRoute>
       </Route>
