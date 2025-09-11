@@ -482,14 +482,21 @@ export default function EnhancedBulkUploads() {
         }
       }
 
+      // Extract QR code URL if available
+      const qrCodeUrl = card.qrCodes?.find(qr => qr.type === 'url')?.data || "";
+      const extractedWebsite = card.website || qrCodeUrl || "";
+
       await addDoc(collection(db, "contacts"), {
         firstName: card.name?.split(' ')[0] || "",
         lastName: card.name?.split(' ').slice(1).join(' ') || "",
         phone: card.phones?.[0] || card.landlines?.[0] || "",
+        phones: card.phones || [],
         email: card.email?.toLowerCase() || "",
         company: card.company || "",
         services: card.services || "",
         address: card.address || "",
+        website: extractedWebsite,
+        qrCodeUrl: qrCodeUrl,
         groupIds: selectedGroupIds,
         ownerId: user.uid,
         createdAt: serverTimestamp(),
@@ -548,14 +555,21 @@ export default function EnhancedBulkUploads() {
           }
         }
 
+        // Extract QR code URL if available
+        const qrCodeUrl = card.qrCodes?.find(qr => qr.type === 'url')?.data || "";
+        const extractedWebsite = card.website || qrCodeUrl || "";
+
         await addDoc(collection(db, "contacts"), {
           firstName: card.name?.split(' ')[0] || "",
           lastName: card.name?.split(' ').slice(1).join(' ') || "",
           phone: card.phones?.[0] || card.landlines?.[0] || "",
+          phones: card.phones || [],
           email: card.email?.toLowerCase() || "",
           company: card.company || "",
           services: card.services || "",
           address: card.address || "",
+          website: extractedWebsite,
+          qrCodeUrl: qrCodeUrl,
           groupIds: selectedGroupIds,
           ownerId: user.uid,
           createdAt: serverTimestamp(),
