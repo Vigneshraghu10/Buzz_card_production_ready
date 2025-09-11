@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Layers, FileText, Camera, UserPlus, FilePlus, CloudUpload, Eye, CreditCard, Crown, Shield } from "lucide-react";
 import { useLocation } from "wouter";
+import { useUsageLimits } from "@/hooks/useUsageLimits";
 
 interface Stats {
   contactsCount: number;
@@ -34,6 +35,7 @@ interface RecentActivity {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { usage, limits, loading: usageLimitsLoading } = useUsageLimits();
   const [stats, setStats] = useState<Stats>({
     contactsCount: 0,
     groupsCount: 0,
@@ -159,7 +161,7 @@ export default function Dashboard() {
   const statsCards = [
     { name: "Total Contacts", count: stats.contactsCount, icon: Users, color: "from-blue-500 to-blue-600" },
     { name: "Groups", count: stats.groupsCount, icon: Layers, color: "from-green-500 to-green-600" },
-    { name: "Digital Cards", count: stats.digitalCardsCount, icon: CreditCard, color: "from-purple-500 to-purple-600" },
+    { name: "Digital Cards", count: `${usage.digitalCardsCount}/${limits.digitalCards}`, icon: CreditCard, color: "from-purple-500 to-purple-600" },
     { name: "AI Processed Cards", count: stats.scannedCardsCount, icon: Camera, color: "from-indigo-500 to-indigo-600" },
   ];
 
@@ -220,7 +222,7 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) {
+  if (loading || usageLimitsLoading) {
     return (
       <div className="py-6 animate-pulse">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
@@ -241,7 +243,7 @@ export default function Dashboard() {
 
   return (
     <div className="py-6 animate-fadeIn">
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
