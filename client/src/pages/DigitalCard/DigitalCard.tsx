@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import UsageLimitModal from "@/components/UsageLimitModal";
 import { 
@@ -43,6 +44,7 @@ interface DigitalCard {
   primaryColor: string;
   secondaryColor: string;
   qrStyle: string;
+  qrEnabled: boolean;
   updatedAt: Date;
 }
 
@@ -169,6 +171,7 @@ export default function AdvancedDigitalCard() {
     primaryColor: '#3B82F6',
     secondaryColor: '#1E40AF',
     qrStyle: 'square',
+    qrEnabled: true,
     updatedAt: new Date(),
   });
 
@@ -193,6 +196,7 @@ export default function AdvancedDigitalCard() {
         setDigitalCard({
           id: cardsSnapshot.docs[0].id,
           ...cardData,
+          qrEnabled: cardData.qrEnabled ?? true,
           updatedAt: cardData.updatedAt?.toDate() || new Date(),
         } as DigitalCard);
       } else {
@@ -478,7 +482,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white rounded-xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-20 h-20" />
@@ -539,7 +543,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="mt-4 text-center pt-4 border-t border-gray-200">
                   <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16 mx-auto" />
                   <p className="mt-2 text-xs text-gray-500">Scan to save contact</p>
@@ -606,7 +610,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white/90 rounded-2xl backdrop-blur">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -668,7 +672,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <img src={qrCodeUrl} alt="QR Code" className="w-12 h-12 mx-auto opacity-60" />
                 </div>
@@ -726,7 +730,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -787,7 +791,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-gray-800 rounded-xl border border-gray-600">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -832,7 +836,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="mt-6 text-center">
                   <img src={qrCodeUrl} alt="QR Code" className="w-14 h-14 mx-auto opacity-70" />
                 </div>
@@ -888,7 +892,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white/90 rounded-2xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -939,7 +943,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white rounded-xl shadow-sm">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -1001,7 +1005,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && (
+              {qrCodeUrl && digitalCard.qrEnabled && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white rounded-xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -1341,6 +1345,25 @@ export default function AdvancedDigitalCard() {
                         className="border-gray-300 focus:border-purple-500 focus:ring-purple-500"
                         placeholder="Share what clients say about your work..."
                       />
+                    </div>
+
+                    {/* QR Code Enable Toggle */}
+                    <div className="sm:col-span-2">
+                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                        <div className="flex items-center">
+                          <QrCode className="h-5 w-5 mr-3 text-purple-600" />
+                          <div>
+                            <Label className="text-sm font-medium text-gray-900">Enable QR Code</Label>
+                            <p className="text-xs text-gray-600 mt-1">Show QR code on your digital card for easy contact sharing</p>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={digitalCard.qrEnabled}
+                          onCheckedChange={(checked) => setDigitalCard(prev => ({ ...prev, qrEnabled: checked }))}
+                          data-testid="toggle-qr-enabled"
+                          className="data-[state=checked]:bg-purple-600"
+                        />
+                      </div>
                     </div>
 
                     {/* QR Code Style Selector */}
