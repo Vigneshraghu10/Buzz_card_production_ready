@@ -52,7 +52,7 @@ export function useUsageLimits(): UsageLimitsHook {
   const paidLimits: UsageLimits = {
     contacts: Infinity,
     groups: Infinity,
-    digitalCards: 5, // Still limited to 5 even for paid users
+    digitalCards: 10, // Limited to 10 digital cards for paid users
     aiScans: Infinity,
   };
 
