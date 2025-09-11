@@ -981,19 +981,39 @@ export default function EnhancedBulkUploads() {
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-gray-500">Phone Numbers</Label>
-                          <p className="mt-1">
-                            {card.phones && card.phones.length > 0 
-                              ? card.phones.join(", ") 
-                              : "Not provided"}
-                          </p>
+                          <div className="mt-1 space-y-1">
+                            {card.phones && card.phones.length > 0 ? (
+                              card.phones.map((phone, idx) => (
+                                <div key={idx} className="flex items-center space-x-2" data-testid={`phone-mobile-${idx}`}>
+                                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                                  <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded border" data-testid={`text-phone-${idx}`}>
+                                    {phone}
+                                  </span>
+                                  <span className="text-xs text-gray-500">Mobile</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-gray-500 text-sm">Not provided</p>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-gray-500">Landlines</Label>
-                          <p className="mt-1">
-                            {card.landlines && card.landlines.length > 0 
-                              ? card.landlines.join(", ") 
-                              : "Not provided"}
-                          </p>
+                          <div className="mt-1 space-y-1">
+                            {card.landlines && card.landlines.length > 0 ? (
+                              card.landlines.map((landline, idx) => (
+                                <div key={idx} className="flex items-center space-x-2" data-testid={`phone-landline-${idx}`}>
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                                  <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded border" data-testid={`text-landline-${idx}`}>
+                                    {landline}
+                                  </span>
+                                  <span className="text-xs text-gray-500">Landline</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-gray-500 text-sm">Not provided</p>
+                            )}
+                          </div>
                         </div>
                         {card.services && (
                           <div className="md:col-span-2">
