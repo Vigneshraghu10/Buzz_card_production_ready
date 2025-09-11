@@ -55,7 +55,6 @@ interface ProcessedCard extends ParsedContact {
   saved?: boolean;
   isFromCamera?: boolean;
   captureIndex?: number;
-  qrCodes?: { type: string; data: string }[];
   imageUrl?: string;
 }
 
@@ -429,7 +428,7 @@ export default function EnhancedBulkUploads() {
         const isDupe = await isDuplicateContact(
           user.uid, 
           card.email, 
-          card.phones?.[0] || ""
+          card.phones || []
         );
         if (isDupe) {
           toast({
@@ -500,7 +499,7 @@ export default function EnhancedBulkUploads() {
           const isDupe = await isDuplicateContact(
             user.uid, 
             card.email, 
-            card.phones?.[0] || ""
+            card.phones || []
           );
           if (isDupe) {
             duplicateCount++;
@@ -1030,10 +1029,20 @@ export default function EnhancedBulkUploads() {
                       }
                     }}
                     disabled={processing}
-                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-3 rounded-xl font-semibold shadow-lg disabled:opacity-50"
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-md disabled:opacity-50 transition-all duration-200"
+                    size="sm"
                   >
-                    <CloudUpload className="h-5 w-5 mr-2" />
-                    {processing ? 'Processing...' : 'Choose Files'}
+                    {processing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CloudUpload className="h-4 w-4 mr-2" />
+                        Process
+                      </>
+                    )}
                   </Button>
                   
                   <Dialog open={showCamera} onOpenChange={setShowCamera}>
@@ -1047,10 +1056,11 @@ export default function EnhancedBulkUploads() {
                           }
                         }}
                         disabled={processing}
-                        className="border-purple-300 text-purple-600 hover:bg-purple-50 px-8 py-3 rounded-xl font-semibold"
+                        className="border-blue-300 text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition-all duration-200"
+                        size="sm"
                       >
-                        <Camera className="h-5 w-5 mr-2" />
-                        Use Camera
+                        <Camera className="h-4 w-4 mr-2" />
+                        Camera
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-[900px] max-h-[90vh]">
@@ -1256,15 +1266,20 @@ export default function EnhancedBulkUploads() {
                   </Button>
                   
                   {processing && (
-                    <div className="mt-4">
-                      <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                        <span>Processing progress</span>
-                        <span>{Math.round(progress)}% complete</span>
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center justify-between text-xs text-blue-700 mb-2">
+                        <span className="flex items-center">
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          Processing
+                        </span>
+                        <span className="font-medium">{Math.round(progress)}%</span>
                       </div>
-                      <Progress value={progress} className="w-full h-3" />
-                      <p className="text-sm text-gray-500 mt-2 text-center">
-                        {currentFile && `Currently processing: ${currentFile}`}
-                      </p>
+                      <Progress value={progress} className="w-full h-2" />
+                      {currentFile && (
+                        <p className="text-xs text-blue-600 mt-2 truncate">
+                          {currentFile}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
