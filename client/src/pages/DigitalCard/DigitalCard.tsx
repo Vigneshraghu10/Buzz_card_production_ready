@@ -228,7 +228,7 @@ export default function AdvancedDigitalCard() {
         address: digitalCard.address,
       });
       
-      const qrUrl = await generateQrFromText(vCardData);
+      const qrUrl = await generateQrFromText(vCardData, digitalCard.companyLogoUrl);
       setQrCodeUrl(qrUrl);
     } catch (error) {
       console.error("Error generating QR code:", error);
