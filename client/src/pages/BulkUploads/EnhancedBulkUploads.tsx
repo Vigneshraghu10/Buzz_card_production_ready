@@ -46,7 +46,8 @@ import {
   CameraOff,
   RotateCcw,
   ArrowRight,
-  MessageSquare
+  MessageSquare,
+  ExternalLink
 } from "lucide-react";
 
 interface ProcessedCard extends ParsedContact {
@@ -1015,6 +1016,23 @@ export default function EnhancedBulkUploads() {
                             )}
                           </div>
                         </div>
+                        {card.website && (
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">Website</Label>
+                            <div className="mt-1">
+                              <a
+                                href={!/^https?:\/\//i.test(card.website.trim()) ? `https://${card.website.trim()}` : card.website.trim()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 underline text-sm font-mono bg-gray-50 px-2 py-1 rounded border flex items-center space-x-1 w-fit"
+                                data-testid="link-website"
+                              >
+                                <span>{card.website}</span>
+                                <ExternalLink className="h-3 w-3 text-blue-500" />
+                              </a>
+                            </div>
+                          </div>
+                        )}
                         {card.services && (
                           <div className="md:col-span-2">
                             <Label className="text-sm font-medium text-gray-500">Services/Position</Label>
