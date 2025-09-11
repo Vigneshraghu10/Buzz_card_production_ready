@@ -1449,42 +1449,6 @@ export default function AdvancedDigitalCard() {
                     </div>
                   </div>
 
-                  {/* Template Info */}
-                  <div className="mt-6 p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {TEMPLATES.find(t => t.id === digitalCard.template)?.name} Template
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {TEMPLATES.find(t => t.id === digitalCard.template)?.description}
-                        </p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <div className="text-2xl">
-                          {TEMPLATES.find(t => t.id === digitalCard.template)?.preview}
-                        </div>
-                        {(() => {
-                          const template = TEMPLATES.find(t => t.id === digitalCard.template);
-                          const IconComponent = template?.icon;
-                          return IconComponent ? <IconComponent className="h-5 w-5 text-purple-600" /> : null;
-                        })()}
-                      </div>
-                    </div>
-                    
-                    {/* Color Display */}
-                    <div className="flex items-center space-x-2 mt-3">
-                      <span className="text-xs text-gray-500">Colors:</span>
-                      <div 
-                        className="w-4 h-4 rounded-full border border-gray-300"
-                        style={{ backgroundColor: digitalCard.primaryColor }}
-                      />
-                      <div 
-                        className="w-4 h-4 rounded-full border border-gray-300"
-                        style={{ backgroundColor: digitalCard.secondaryColor }}
-                      />
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
             </div>
