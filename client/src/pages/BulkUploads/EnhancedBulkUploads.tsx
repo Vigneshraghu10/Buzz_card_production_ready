@@ -45,7 +45,8 @@ import {
   ScanLine,
   CameraOff,
   RotateCcw,
-  ArrowRight
+  ArrowRight,
+  MessageSquare
 } from "lucide-react";
 
 interface ProcessedCard extends ParsedContact {
@@ -63,6 +64,21 @@ interface Group {
   name: string;
   ownerId: string;
 }
+
+interface Template {
+  id: string;
+  name: string;
+  content: string;
+  createdAt: Date;
+  ownerId: string;
+}
+
+// WhatsApp Icon Component (copied from Contacts)
+const WhatsAppIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893A11.821 11.821 0 0020.905 3.288z"/>
+  </svg>
+);
 
 interface UploadResult {
   id: string;
@@ -93,6 +109,13 @@ export default function EnhancedBulkUploads() {
   const [saving, setSaving] = useState<string | null>(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   
+  // WhatsApp functionality states
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedContactForMessage, setSelectedContactForMessage] = useState<ProcessedCard | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [customMessage, setCustomMessage] = useState("");
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  
   // Enhanced camera and upload states
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -112,6 +135,7 @@ export default function EnhancedBulkUploads() {
   useEffect(() => {
     if (!user) return;
     fetchGroups();
+    fetchTemplates();
   }, [user]);
 
   // Cleanup camera stream on component unmount
@@ -141,6 +165,22 @@ export default function EnhancedBulkUploads() {
       });
     } finally {
       setLoadingGroups(false);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const templatesQuery = query(collection(db, "templates"), where("ownerId", "==", user!.uid));
+      const templatesSnapshot = await getDocs(templatesQuery);
+      const templatesData = templatesSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as Template[];
+      setTemplates(templatesData);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+      // Don't show error toast for templates as it's optional
     }
   };
 
@@ -563,6 +603,156 @@ export default function EnhancedBulkUploads() {
     setEditData({ ...card });
   };
 
+  // WhatsApp messaging functions (adapted from Contacts)
+  const handleSendMessage = (card: ProcessedCard) => {
+    setSelectedContactForMessage(card);
+    setSelectedTemplate(null);
+    setCustomMessage("");
+    setShowTemplateModal(true);
+  };
+
+  const replacePlaceholders = (content: string, card: ProcessedCard) => {
+    const firstName = card.name?.split(' ')[0] || '';
+    const lastName = card.name?.split(' ').slice(1).join(' ') || '';
+    return content
+      .replace(/\{firstName\}/g, firstName)
+      .replace(/\{lastName\}/g, lastName)
+      .replace(/\{fullName\}/g, card.name || '')
+      .replace(/\{company\}/g, card.company || '')
+      .replace(/\{email\}/g, card.email || '')
+      .replace(/\{phone\}/g, card.phones?.[0] || '');
+  };
+
+  const formatMessageForWhatsApp = (message: string) => {
+    let cleanMessage = message
+      .trim()
+      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .replace(/\s+/g, ' ')
+      .replace(/\n /g, '\n')
+      .replace(/ \n/g, '\n');
+
+    if (cleanMessage.length > 1500) {
+      cleanMessage = cleanMessage.substring(0, 1500) + '...';
+    }
+
+    return cleanMessage;
+  };
+
+  const formatPhoneNumber = (rawNumber: string): string => {
+    if (!rawNumber) return "";
+
+    let cleaned = rawNumber.replace(/[^\d]/g, "");
+    cleaned = cleaned.replace(/^0+/, "");
+
+    if (!cleaned.startsWith("91") && cleaned.length <= 10) {
+      cleaned = "91" + cleaned;
+    }
+
+    return cleaned;
+  };
+
+  const copyMessageToClipboard = async (message: string) => {
+    try {
+      await navigator.clipboard.writeText(message);
+      toast({
+        title: "Copied!",
+        description: "Message copied to clipboard. You can paste it in WhatsApp manually.",
+      });
+    } catch (error) {
+      console.error("Failed to copy message:", error);
+      toast({
+        title: "Copy Failed",
+        description: "Unable to copy message to clipboard",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendWhatsAppMessage = () => {
+    if (!selectedContactForMessage) return;
+
+    const phoneNumber = formatPhoneNumber(selectedContactForMessage.phones?.[0] || "");
+    if (!phoneNumber) {
+      toast({
+        title: "Error",
+        description: "No phone number available for this contact",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    let messageContent = "";
+
+    if (selectedTemplate) {
+      messageContent = replacePlaceholders(
+        selectedTemplate.content,
+        selectedContactForMessage
+      );
+    } else if (customMessage.trim()) {
+      messageContent = replacePlaceholders(
+        customMessage,
+        selectedContactForMessage
+      );
+    } else {
+      const firstName = selectedContactForMessage.name?.split(' ')[0] || 'there';
+      messageContent = `Hi ${firstName}, I hope you're doing well!`;
+    }
+
+    const formattedMessage = formatMessageForWhatsApp(messageContent);
+
+    try {
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
+      const isTablet = /iPad/i.test(navigator.userAgent);
+      
+      let whatsappUrl: string;
+      let fallbackUrl: string;
+
+      if (isMobile && !isTablet) {
+        whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
+        fallbackUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(formattedMessage)}`;
+        
+        const openAppTimeout = setTimeout(() => {
+          window.open(fallbackUrl, "_blank");
+        }, 1000);
+
+        window.location.href = whatsappUrl;
+        
+        window.addEventListener('blur', () => {
+          clearTimeout(openAppTimeout);
+        });
+
+      } else {
+        whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
+        
+        if (whatsappUrl.length > 2000) {
+          copyMessageToClipboard(formattedMessage);
+          window.open(`https://web.whatsapp.com/send?phone=${phoneNumber}`, "_blank");
+          toast({
+            title: "Message Too Long",
+            description: "Message copied to clipboard. Please paste it manually in WhatsApp.",
+          });
+        } else {
+          window.open(whatsappUrl, "_blank");
+          toast({
+            title: "Success",
+            description: "WhatsApp opened with pre-filled message",
+          });
+        }
+      }
+      
+      setShowTemplateModal(false);
+      setSelectedContactForMessage(null);
+      
+    } catch (error) {
+      console.error("WhatsApp error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to open WhatsApp. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const saveEditedCard = () => {
     if (!editingCard) return;
     
@@ -729,7 +919,19 @@ export default function EnhancedBulkUploads() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleSendMessage(card)}
+                          disabled={!card.phones || card.phones.length === 0}
+                          className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                          data-testid={`button-whatsapp-${card.id}`}
+                        >
+                          <WhatsAppIcon className="h-4 w-4 mr-1" />
+                          WhatsApp
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleEditCard(card)}
+                          data-testid={`button-edit-${card.id}`}
                         >
                           <Edit className="h-4 w-4 mr-1" />
                           Edit
@@ -738,6 +940,7 @@ export default function EnhancedBulkUploads() {
                           size="sm"
                           onClick={() => saveContact(card)}
                           disabled={saving === card.id}
+                          data-testid={`button-save-${card.id}`}
                         >
                           {saving === card.id ? (
                             <Loader2 className="h-4 w-4 mr-1 animate-spin" />
@@ -1335,6 +1538,118 @@ export default function EnhancedBulkUploads() {
           currentCount={usage.aiScansCount}
           limit={limits.aiScans}
         />
+
+        {/* WhatsApp Template Modal */}
+        <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center space-x-2">
+                <WhatsAppIcon className="h-5 w-5 text-green-600" />
+                <span>Send WhatsApp Message</span>
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              {selectedContactForMessage && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-600 mb-1">Sending to:</p>
+                  <p className="font-medium">{selectedContactForMessage.name || 'Unknown Contact'}</p>
+                  <p className="text-sm text-gray-500">
+                    {selectedContactForMessage.phones?.[0] ? formatPhoneNumber(selectedContactForMessage.phones[0]) : 'No phone number'}
+                  </p>
+                </div>
+              )}
+
+              {templates.length > 0 && (
+                <div>
+                  <Label className="text-sm font-medium">Choose a Template (Optional)</Label>
+                  <div className="mt-2 space-y-2">
+                    {templates.map((template) => (
+                      <div
+                        key={template.id}
+                        className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                          selectedTemplate?.id === template.id
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setSelectedTemplate(template)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-sm">{template.name}</h4>
+                          <div className="flex items-center space-x-1">
+                            <MessageSquare className="h-3 w-3 text-gray-400" />
+                            <span className="text-xs text-gray-500">
+                              {template.content.length} chars
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                          {template.content.length > 100 
+                            ? template.content.substring(0, 100) + '...' 
+                            : template.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label className="text-sm font-medium">
+                  {selectedTemplate ? 'Custom Message (Optional)' : 'Custom Message'}
+                </Label>
+                <Textarea
+                  placeholder={selectedTemplate 
+                    ? 'Override template with custom message...' 
+                    : 'Enter your message here...'}
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  className="mt-2 min-h-[100px]"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use placeholders: {'{firstName}'}, {'{lastName}'}, {'{company}'}, {'{email}'}, {'{phone}'}
+                </p>
+              </div>
+
+              {(selectedTemplate || customMessage) && selectedContactForMessage && (
+                <div>
+                  <Label className="text-sm font-medium">Message Preview</Label>
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800 whitespace-pre-wrap">
+                      {selectedTemplate && !customMessage.trim()
+                        ? replacePlaceholders(selectedTemplate.content, selectedContactForMessage)
+                        : customMessage.trim()
+                        ? replacePlaceholders(customMessage, selectedContactForMessage)
+                        : 'No message selected'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowTemplateModal(false);
+                    setSelectedTemplate(null);
+                    setCustomMessage('');
+                    setSelectedContactForMessage(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSendWhatsAppMessage}
+                  disabled={!selectedContactForMessage?.phones?.[0] || (!selectedTemplate && !customMessage.trim())}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <WhatsAppIcon className="h-4 w-4 mr-2" />
+                  Send Message
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Hidden canvas for camera capture */}
         <canvas ref={canvasRef} className="hidden" />
