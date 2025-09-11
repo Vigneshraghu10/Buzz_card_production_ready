@@ -243,13 +243,35 @@ function Contacts() {
         const transformedData = jsonData.map((row: any, index) => {
           const firstName = row['First Name'] || row['firstName'] || row['Name']?.split(' ')[0] || '';
           const lastName = row['Last Name'] || row['lastName'] || row['Name']?.split(' ').slice(1).join(' ') || '';
-          const phone = row['Phone'] || row['phone'] || row['Phone Number'] || row['Mobile'] || '';
-          const phone2 = row['Phone 2'] || row['phone2'] || row['Secondary Phone'] || '';
+          
+          // Enhanced phone number extraction supporting multiple formats
+          let phones: string[] = [];
+          
+          // First, check for comma-separated "Phones" column (from export)
+          const phonesColumn = row['Phones'] || row['phones'];
+          if (phonesColumn) {
+            phones = phonesColumn.toString().split(/[,;]/).map(p => p.trim()).filter(p => p);
+          } else {
+            // Fall back to individual phone columns
+            const phone = row['Phone'] || row['phone'] || row['Phone Number'] || row['Mobile'] || '';
+            const phone2 = row['Phone 2'] || row['phone2'] || row['Secondary Phone'] || '';
+            
+            // Also check for additional numbered phone columns
+            const additionalPhones: string[] = [];
+            for (let i = 3; i <= 10; i++) {
+              const phoneKey = `Phone ${i}`;
+              const phoneValue = row[phoneKey] || row[`phone${i}`] || row[`Phone${i}`];
+              if (phoneValue) {
+                additionalPhones.push(phoneValue.toString().trim());
+              }
+            }
+            
+            phones = [phone, phone2, ...additionalPhones].filter(p => p).map(p => p.toString().trim());
+          }
+          
           const email = row['Email'] || row['email'] || row['Email Address'] || '';
           const company = row['Company'] || row['company'] || row['Organization'] || '';
           const qrCodeUrl = row['QR Code URL'] || row['qrCodeUrl'] || row['QR Code'] || row['URL'] || ''; // Added QR Code URL extraction
-          
-          const phones = [phone, phone2].filter(p => p).map(p => p.toString().trim());
 
           return {
             index: index + 1,
