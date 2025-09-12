@@ -104,11 +104,11 @@ export default function Dashboard() {
         }
 
         // Fetch recent activities from contacts with source information
+        // Using separate query to avoid composite index requirement
         const recentContactsQuery = query(
           collection(db, "contacts"),
           where("ownerId", "==", user.uid),
-          orderBy("createdAt", "desc"),
-          limit(10)
+          limit(50) // Get more results to sort client-side
         );
         const recentContactsSnapshot = await getDocs(recentContactsQuery);
 

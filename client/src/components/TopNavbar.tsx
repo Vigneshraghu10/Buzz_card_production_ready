@@ -60,7 +60,7 @@ export default function TopNavbar() {
       </div>
 
       {/* 🔥 Gradient wave animation CSS */}
-      <style jsx>{`
+      <style>{`
         .animated-gradient {
           background: linear-gradient(270deg, #d1fae5, #e0f2fe, #d1fae5);
           background-size: 400% 400%;
