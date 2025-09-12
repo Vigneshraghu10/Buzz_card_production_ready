@@ -53,6 +53,7 @@ export default function ManageDigitalCards() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredCards, setFilteredCards] = useState<DigitalCard[]>([]);
   const [downloadingCards, setDownloadingCards] = useState<Set<string>>(new Set());
+  const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (user) {
@@ -95,6 +96,9 @@ export default function ManageDigitalCards() {
       });
       
       setDigitalCards(sortedCards);
+      
+      // Generate QR codes for all cards
+      await generateQrCodesForCards(sortedCards);
     } catch (error) {
       console.error("Error fetching digital cards:", error);
       toast({
@@ -105,6 +109,32 @@ export default function ManageDigitalCards() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const generateQrCodesForCards = async (cards: DigitalCard[]) => {
+    const newQrCodes = new Map<string, string>();
+    
+    for (const card of cards) {
+      try {
+        const vCardContent = buildVCard({
+          firstName: card.firstName,
+          lastName: card.lastName,
+          title: card.title,
+          company: card.company,
+          email: card.email,
+          phone: card.phone,
+          website: card.website,
+          address: card.address
+        });
+        
+        const qrDataUrl = await generateQrFromText(vCardContent);
+        newQrCodes.set(card.id, qrDataUrl);
+      } catch (error) {
+        console.error(`Error generating QR code for card ${card.id}:`, error);
+      }
+    }
+    
+    setQrCodes(newQrCodes);
   };
 
   const handleCreateNew = () => {
@@ -193,27 +223,41 @@ export default function ManageDigitalCards() {
     }
   };
 
+  const waitForImages = (element: HTMLElement): Promise<void> => {
+    const images = element.querySelectorAll('img');
+    const promises: Promise<void>[] = [];
+
+    images.forEach(img => {
+      if (img.complete && img.naturalWidth > 0) {
+        return; // Image already loaded
+      }
+
+      promises.push(
+        new Promise((resolve) => {
+          const handleLoad = () => {
+            img.removeEventListener('load', handleLoad);
+            img.removeEventListener('error', handleError);
+            resolve();
+          };
+          
+          const handleError = () => {
+            img.removeEventListener('load', handleLoad);
+            img.removeEventListener('error', handleError);
+            resolve(); // Continue even if image fails
+          };
+
+          img.addEventListener('load', handleLoad);
+          img.addEventListener('error', handleError);
+        })
+      );
+    });
+
+    return Promise.all(promises).then(() => {});
+  };
+
   const handleDownloadPreview = async (card: DigitalCard) => {
     try {
       setDownloadingCards(prev => new Set(prev).add(card.id));
-
-      // Generate vCard content for QR code
-      const vCardContent = buildVCard({
-        firstName: card.firstName,
-        lastName: card.lastName,
-        title: card.title,
-        company: card.company,
-        email: card.email,
-        phone: card.phone,
-        website: card.website,
-        address: card.address
-      });
-
-      // Generate QR code
-      const qrDataUrl = await generateQrFromText(vCardContent);
-
-      // Wait for images to load before capturing
-      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Find the card preview element
       const cardElement = document.querySelector(`[data-card-preview="${card.id}"]`);
@@ -221,37 +265,43 @@ export default function ManageDigitalCards() {
         throw new Error("Card preview element not found");
       }
 
+      // Wait for all images to load
+      await waitForImages(cardElement as HTMLElement);
+
       // Generate screenshot using html2canvas
       const canvas = await html2canvas(cardElement as HTMLElement, {
         scale: 3,
         useCORS: true,
-        allowTaint: true,
-        imageTimeout: 10000,
+        allowTaint: false, // Changed to false for CORS safety
+        imageTimeout: 15000,
+        backgroundColor: null,
       });
 
       // Convert to blob and download
       canvas.toBlob((blob) => {
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${card.firstName || 'Contact'}_${card.lastName || 'Card'}_Preview.png`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-
-          toast({
-            title: "Download Complete",
-            description: "Card preview downloaded successfully",
-          });
+        if (!blob) {
+          throw new Error("Failed to generate image blob");
         }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${card.firstName || 'Contact'}_${card.lastName || 'Card'}_Preview.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        toast({
+          title: "Download Complete",
+          description: "Card preview downloaded successfully",
+        });
       }, 'image/png', 1.0);
     } catch (error) {
       console.error("Error downloading preview:", error);
       toast({
         title: "Download Failed", 
-        description: "Failed to download card preview",
+        description: error instanceof Error ? error.message : "Failed to download card preview",
         variant: "destructive",
       });
     } finally {
@@ -435,7 +485,7 @@ export default function ManageDigitalCards() {
                       <div className="flex items-center space-x-3">
                         {card.avatarUrl ? (
                           <Avatar className="w-12 h-12 ring-2 ring-white/30">
-                            <AvatarImage src={card.avatarUrl} />
+                            <AvatarImage src={card.avatarUrl} crossOrigin="anonymous" />
                             <AvatarFallback className="bg-white/20 text-white font-bold">
                               {card.firstName?.charAt(0)}{card.lastName?.charAt(0)}
                             </AvatarFallback>
@@ -451,6 +501,7 @@ export default function ManageDigitalCards() {
                           src={card.companyLogoUrl} 
                           alt="Company" 
                           className="w-10 h-10 rounded object-contain bg-white/20 p-1"
+                          crossOrigin="anonymous"
                         />
                       )}
                     </div>
@@ -480,9 +531,18 @@ export default function ManageDigitalCards() {
                     {/* QR Code */}
                     <div className="flex justify-center mt-auto">
                       <div className="bg-white p-2 rounded-lg">
-                        <div className="w-8 h-8 bg-gray-300 rounded flex items-center justify-center">
-                          <QrCode className="h-4 w-4 text-gray-600" />
-                        </div>
+                        {qrCodes.get(card.id) ? (
+                          <img 
+                            src={qrCodes.get(card.id)} 
+                            alt="QR Code" 
+                            className="w-8 h-8 object-contain" 
+                            crossOrigin="anonymous"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 bg-gray-300 rounded flex items-center justify-center">
+                            <QrCode className="h-4 w-4 text-gray-600" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
