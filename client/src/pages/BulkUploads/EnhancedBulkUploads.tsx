@@ -1544,7 +1544,7 @@ export default function EnhancedBulkUploads() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => handleSendWhatsAppMessage(selectedTemplate)}
+                  onClick={() => handleSendWhatsAppMessage(selectedTemplate || undefined)}
                   disabled={!selectedContactForMessage?.phones?.[0] || (!selectedTemplate && !customMessage.trim())}
                   className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto"
                 >
@@ -1560,9 +1560,48 @@ export default function EnhancedBulkUploads() {
   }
 
   // Feedback handler
-  const handleFeedbackSubmit = (rating: number, comment: string) => {
-    console.log('Feedback submitted:', { rating, comment, user: user?.uid });
-    // Here you could save to Firebase or send to analytics
+  const handleFeedbackSubmit = async (rating: number, comment: string) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to submit feedback",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Save feedback to Firebase
+      await addDoc(collection(db, "feedback"), {
+        userId: user.uid,
+        userEmail: user.email,
+        feature: "ai-card-scanner",
+        rating: rating,
+        comment: comment.trim(),
+        createdAt: serverTimestamp(),
+        deviceInfo: {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language,
+        }
+      });
+
+      toast({
+        title: "Feedback Submitted",
+        description: "Thank you for your feedback! It helps us improve the AI Card Scanner.",
+      });
+
+      // Close feedback form after successful submission
+      setShowFeedbackForm(false);
+
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      toast({
+        title: "Submission Failed",
+        description: "Failed to submit feedback. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
