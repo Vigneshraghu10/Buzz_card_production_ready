@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import CameraCapture from "@/components/CameraCapture";
 import UsageLimitModal from "@/components/UsageLimitModal";
+import FeedbackForm from "@/components/FeedbackForm";
 import { 
   Upload, 
   Loader2, 
@@ -50,7 +51,10 @@ import {
   ExternalLink,
   Monitor,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Heart,
+  Star,
+  ThumbsUp
 } from "lucide-react";
 
 interface ProcessedCard extends ParsedContact {
@@ -150,6 +154,9 @@ export default function EnhancedBulkUploads() {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Feedback form state
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
 
   // Device detection
   const deviceType = getDeviceType();
@@ -1552,22 +1559,56 @@ export default function EnhancedBulkUploads() {
     );
   }
 
+  // Feedback handler
+  const handleFeedbackSubmit = (rating: number, comment: string) => {
+    console.log('Feedback submitted:', { rating, comment, user: user?.uid });
+    // Here you could save to Firebase or send to analytics
+  };
+
   return (
     <div className="py-6">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
         <div className="mb-8">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <Sparkles className="text-white h-6 w-6" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <Sparkles className="text-white h-6 w-6" />
+              </div>
+              <div>
+                <h2 className="text-2xl sm:text-3xl font-bold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent sm:text-4xl sm:truncate">
+                  AI Business Card Scanner
+                </h2>
+                <p className="mt-1 text-base sm:text-lg text-gray-600">
+                  Extract data from multiple business cards with advanced AI detection
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent sm:text-4xl sm:truncate">
-                AI Business Card Scanner
-              </h2>
-              <p className="mt-1 text-base sm:text-lg text-gray-600">
-                Extract data from multiple business cards with advanced AI detection
-              </p>
-            </div>
+            
+            {/* Feedback Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFeedbackForm(true)}
+              className="hidden sm:flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200 hover:from-blue-100 hover:to-purple-100 text-blue-700 hover:text-blue-800"
+              data-testid="feedback-button"
+            >
+              <Heart className="h-4 w-4" />
+              <span>Feedback</span>
+            </Button>
+          </div>
+          
+          {/* Mobile Feedback Button */}
+          <div className="sm:hidden mb-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFeedbackForm(true)}
+              className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200 hover:from-blue-100 hover:to-purple-100 text-blue-700 hover:text-blue-800"
+              data-testid="feedback-button-mobile"
+            >
+              <Heart className="h-4 w-4" />
+              <span>Share Your Feedback</span>
+            </Button>
           </div>
           
           {/* AI Features Banner - Enhanced mobile layout */}
@@ -1994,6 +2035,13 @@ export default function EnhancedBulkUploads() {
           feature="aiScan"
           currentCount={usage.aiScansCount}
           limit={limits.aiScans}
+        />
+
+        {/* Feedback Form */}
+        <FeedbackForm
+          isOpen={showFeedbackForm}
+          onClose={() => setShowFeedbackForm(false)}
+          onSubmit={handleFeedbackSubmit}
         />
 
         {/* Hidden canvas for camera capture */}
