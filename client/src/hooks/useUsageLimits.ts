@@ -44,7 +44,7 @@ export function useUsageLimits(): UsageLimitsHook {
   const freeLimits: UsageLimits = {
     contacts: 1,
     groups: 1,
-    digitalCards: 1,
+    digitalCards: 10, // Both free and paid users can store up to 10 digital cards
     aiScans: 1,
   };
 

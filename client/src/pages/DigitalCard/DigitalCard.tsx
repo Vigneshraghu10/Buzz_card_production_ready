@@ -191,6 +191,14 @@ export default function AdvancedDigitalCard() {
     }
   }, [user, location]);
 
+  // Auto-enable QR logo when company logo is uploaded
+  useEffect(() => {
+    setDigitalCard(prev => ({
+      ...prev,
+      qrLogoEnabled: !!prev.companyLogoUrl
+    }));
+  }, [digitalCard.companyLogoUrl]);
+
   useEffect(() => {
     if (digitalCard.firstName || digitalCard.lastName) {
       generateQRCode();
@@ -377,6 +385,34 @@ export default function AdvancedDigitalCard() {
     }
   };
 
+  const resetForm = () => {
+    const newPublicId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setDigitalCard({
+      ownerId: user?.uid || "",
+      publicId: newPublicId,
+      firstName: "",
+      lastName: "",
+      title: "",
+      company: "",
+      email: "",
+      phone: "",
+      website: "",
+      address: "",
+      services: "",
+      testimonials: "",
+      avatarUrl: "",
+      companyLogoUrl: "",
+      isPublic: true,
+      template: 'modern',
+      primaryColor: '#3B82F6',
+      secondaryColor: '#1E40AF',
+      qrEnabled: true,
+      qrLogoEnabled: false,
+      updatedAt: new Date(),
+    });
+    setQrCodeUrl("");
+  };
+
   const handleSaveProfile = async () => {
     // Check usage limits for new digital cards
     if (!digitalCard.id && !canAddDigitalCard) {
@@ -408,9 +444,31 @@ export default function AdvancedDigitalCard() {
         description: isEditMode ? "Digital card updated successfully" : "Digital card saved successfully",
       });
 
-      // Redirect to manage cards after editing
+      // Handle post-save actions
       if (isEditMode) {
+        // Redirect to manage cards after editing
         navigate("/manage-cards");
+      } else {
+        // For new cards, refresh usage to get updated counts
+        await refreshUsage();
+        
+        // Reset form for new card creation after a delay
+        setTimeout(() => {
+          resetForm();
+          toast({
+            title: "Form Reset",
+            description: "Ready to create another digital card",
+          });
+          
+          // Check if user has reached the limit using fresh usage data
+          if (usage.digitalCardsCount >= limits.digitalCards) {
+            toast({
+              title: "Limit Reached",
+              description: `You have reached the maximum limit of ${limits.digitalCards} digital cards`,
+              variant: "default",
+            });
+          }
+        }, 1500);
       }
     } catch (error) {
       console.error("Error saving digital card:", error);
@@ -1444,46 +1502,31 @@ export default function AdvancedDigitalCard() {
                       />
                     </div>
 
-                    {/* QR Code Settings */}
+                    {/* QR Code Information */}
                     <div className="sm:col-span-2 space-y-4">
-                      {/* Enable QR Code Toggle */}
-                      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-                        <div className="flex items-center">
-                          <QrCode className="h-5 w-5 mr-3 text-purple-600" />
+                      {/* QR Code Info Panel */}
+                      <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center mb-3">
+                          <QrCode className="h-5 w-5 mr-3 text-blue-600" />
                           <div>
-                            <Label className="text-sm font-medium text-gray-900">Enable QR Code</Label>
-                            <p className="text-xs text-gray-600 mt-1">Show QR code on your digital card for easy contact sharing</p>
+                            <Label className="text-sm font-medium text-gray-900">QR Code</Label>
+                            <p className="text-xs text-gray-600 mt-1">QR code is automatically generated for easy contact sharing</p>
                           </div>
                         </div>
-                        <Switch
-                          checked={digitalCard.qrEnabled}
-                          onCheckedChange={(checked) => setDigitalCard(prev => ({ ...prev, qrEnabled: checked }))}
-                          data-testid="toggle-qr-enabled"
-                          className="data-[state=checked]:bg-purple-600"
-                        />
+                        {digitalCard.companyLogoUrl ? (
+                          <div className="flex items-center text-xs text-green-700 bg-green-100 rounded-md px-2 py-1">
+                            <Building2 className="h-3 w-3 mr-2" />
+                            Company logo will appear in QR code center
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-xs text-gray-600 bg-gray-100 rounded-md px-2 py-1">
+                            <ImageIcon className="h-3 w-3 mr-2" />
+                            Upload company logo to display in QR code center
+                          </div>
+                        )}
                       </div>
 
-                      {/* QR Code Logo Toggle */}
-                      {digitalCard.qrEnabled && (
-                        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
-                          <div className="flex items-center">
-                            <Building2 className="h-5 w-5 mr-3 text-green-600" />
-                            <div>
-                              <Label className="text-sm font-medium text-gray-900">QR Code Logo</Label>
-                              <p className="text-xs text-gray-600 mt-1">Embed your company logo in the center of the QR code</p>
-                            </div>
-                          </div>
-                          <Switch
-                            checked={digitalCard.qrLogoEnabled}
-                            onCheckedChange={(checked) => setDigitalCard(prev => ({ ...prev, qrLogoEnabled: checked }))}
-                            data-testid="toggle-qr-logo"
-                            className="data-[state=checked]:bg-green-600"
-                            disabled={!digitalCard.companyLogoUrl}
-                          />
-                        </div>
-                      )}
-
-                      {digitalCard.qrEnabled && digitalCard.qrLogoEnabled && !digitalCard.companyLogoUrl && (
+                      {!digitalCard.companyLogoUrl && (
                         <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
                           Upload a company logo to enable QR code logo embedding.
                         </p>

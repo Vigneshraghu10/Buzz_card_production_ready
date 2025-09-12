@@ -62,8 +62,8 @@ export async function generateQrFromText(text: string, logoUrl?: string): Promis
       logoImage.src = logoUrl;
     });
 
-    // Calculate logo dimensions (20-25% of QR code size)
-    const logoSize = Math.min(canvas.width, canvas.height) * 0.22;
+    // Calculate logo dimensions (25-30% of QR code size for better visibility)
+    const logoSize = Math.min(canvas.width, canvas.height) * 0.28;
     const logoX = (canvas.width - logoSize) / 2;
     const logoY = (canvas.height - logoSize) / 2;
 
