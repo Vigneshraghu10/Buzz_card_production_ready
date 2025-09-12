@@ -495,12 +495,16 @@ export default function ScannedCards() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="phone">Phone Number</Label>
+                    <Label htmlFor="phone">Phone Numbers</Label>
                     <Input
                       id="phone"
-                      value={editData.phone || ""}
-                      onChange={(e) => setEditData(prev => ({ ...prev, phone: e.target.value }))}
+                      value={editData.phones?.join(', ') || ""}
+                      onChange={(e) => setEditData(prev => ({ 
+                        ...prev, 
+                        phones: e.target.value.split(',').map(p => p.trim()).filter(Boolean)
+                      }))}
                       className="mt-1"
+                      placeholder="Enter phone numbers separated by commas"
                     />
                   </div>
                   <div className="md:col-span-2">

@@ -652,7 +652,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white rounded-xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-20 h-20" />
@@ -713,7 +713,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="mt-4 text-center pt-4 border-t border-gray-200">
                   <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16 mx-auto" />
                   <p className="mt-2 text-xs text-gray-500">Scan to save contact</p>
@@ -776,7 +776,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white/90 rounded-2xl backdrop-blur">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -838,7 +838,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <img src={qrCodeUrl} alt="QR Code" className="w-12 h-12 mx-auto opacity-60" />
                 </div>
@@ -893,7 +893,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -954,7 +954,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-gray-800 rounded-xl border border-gray-600">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -999,7 +999,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="mt-6 text-center">
                   <img src={qrCodeUrl} alt="QR Code" className="w-14 h-14 mx-auto opacity-70" />
                 </div>
@@ -1052,7 +1052,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white/90 rounded-2xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -1102,7 +1102,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white rounded-xl shadow-sm">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
@@ -1160,7 +1160,7 @@ export default function AdvancedDigitalCard() {
                 )}
               </div>
 
-              {qrCodeUrl && digitalCard.qrEnabled && (
+              {qrCodeUrl && (
                 <div className="text-center">
                   <div className="inline-block p-3 bg-white rounded-xl">
                     <img src={qrCodeUrl} alt="QR Code" className="w-16 h-16" />
