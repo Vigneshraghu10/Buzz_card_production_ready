@@ -84,13 +84,15 @@ export default function CameraCapture({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[95vh] w-[95vw] sm:w-auto overflow-y-auto p-3 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <Camera className="h-5 w-5" />
-            <span>Capture Business Cards</span>
-            <span className="text-sm text-gray-500">
-              ({capturedImages.length}/{maxImages})
+          <DialogTitle className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center space-x-2">
+              <Camera className="h-5 w-5" />
+              <span className="text-sm sm:text-base">Capture Business Cards</span>
+            </div>
+            <span className="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              {capturedImages.length}/{maxImages} cards
             </span>
           </DialogTitle>
         </DialogHeader>
@@ -105,7 +107,7 @@ export default function CameraCapture({
                   audio={false}
                   screenshotFormat="image/jpeg"
                   videoConstraints={videoConstraints}
-                  className="w-full h-64 sm:h-80 object-cover"
+                  className="w-full h-48 sm:h-64 md:h-80 object-cover"
                 />
                 
                 {/* Camera Controls Overlay */}
@@ -154,13 +156,13 @@ export default function CameraCapture({
             <Card>
               <CardContent className="p-4">
                 <h3 className="font-medium mb-3">Captured Images ({capturedImages.length})</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4">
                   {capturedImages.map((imageSrc, index) => (
                     <div key={index} className="relative group">
                       <img
                         src={imageSrc}
                         alt={`Captured business card ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg border-2 border-gray-200"
+                        className="w-full h-20 sm:h-24 object-cover rounded-lg border-2 border-gray-200"
                       />
                       <Button
                         variant="destructive"
@@ -181,14 +183,14 @@ export default function CameraCapture({
           )}
 
           {/* Action Buttons */}
-          <div className="flex justify-between space-x-4">
-            <Button variant="outline" onClick={handleClose}>
+          <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-4">
+            <Button variant="outline" onClick={handleClose} className="order-2 sm:order-1">
               Cancel
             </Button>
             <Button 
               onClick={handleDone}
               disabled={capturedImages.length === 0}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 order-1 sm:order-2"
             >
               <Check className="h-4 w-4 mr-2" />
               Process {capturedImages.length} Image{capturedImages.length !== 1 ? 's' : ''}
