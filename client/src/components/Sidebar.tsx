@@ -56,6 +56,13 @@ const navigation = [
     description: "Your digital profile"
   },
   {
+    name: "Manage Digital Cards",
+    href: "/manage-cards",
+    icon: CreditCard,
+    description: "Keep all cards in one place",
+    // isComingSoon: true
+  },
+  {
     name: "NFC Card",
     href: "/nfc-card",
     icon: Smartphone,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, getDoc } from "firebase/firestore";
 import { useLocation } from "wouter";
@@ -17,11 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import UsageLimitModal from "@/components/UsageLimitModal";
+import html2canvas from 'html2canvas';
 import { 
   Save, Download, Link as LinkIcon, QrCode, Camera, Mail, Phone, 
   Globe, MapPin, Briefcase, Award, Users, Palette, Sparkles,
   Building2, Star, Heart, Zap, Crown, Coffee, Laptop, Paintbrush,
-  Rocket, Diamond, Square, Circle, Hexagon
+  Rocket, Diamond, Image as ImageIcon
 } from "lucide-react";
 
 interface DigitalCard {
@@ -44,8 +45,8 @@ interface DigitalCard {
   template: string;
   primaryColor: string;
   secondaryColor: string;
-  qrStyle: string;
   qrEnabled: boolean;
+  qrLogoEnabled: boolean;
   updatedAt: Date;
 }
 
@@ -54,70 +55,70 @@ const TEMPLATES = [
     id: 'modern',
     name: 'Modern Gradient',
     preview: '🌈',
-    // description: 'Clean design with vibrant gradients',
+    description: 'Clean design with vibrant gradients',
     icon: Sparkles
   },
   {
     id: 'professional',
     name: 'Professional',
     preview: '💼',
-    // description: 'Classic business card style',
+    description: 'Classic business card style',
     icon: Briefcase
   },
   {
     id: 'creative',
     name: 'Creative',
     preview: '🎨',
-    // description: 'Bold and artistic design',
+    description: 'Bold and artistic design',
     icon: Paintbrush
   },
   {
     id: 'minimal',
     name: 'Minimal',
     preview: '⚪',
-    // description: 'Clean and simple layout',
+    description: 'Clean and simple layout',
     icon: Users
   },
   {
     id: 'luxury',
     name: 'Luxury',
-    // preview: '👑',
-    // description: 'Premium golden design',
+    preview: '👑',
+    description: 'Premium golden design',
     icon: Crown
   },
   {
     id: 'tech',
     name: 'Tech',
     preview: '💻',
-    // description: 'Modern tech-focused design',
+    description: 'Modern tech-focused design',
     icon: Laptop
   },
   {
     id: 'elegant',
     name: 'Elegant',
     preview: '💎',
-    // description: 'Sophisticated and refined',
+    description: 'Sophisticated and refined',
     icon: Diamond
   },
   {
     id: 'startup',
     name: 'Startup',
     preview: '🚀',
-    // description: 'Dynamic startup vibe',
+    description: 'Dynamic startup vibe',
     icon: Rocket
   },
   {
     id: 'coffee',
     name: 'Coffee Shop',
     preview: '☕',
-    // description: 'Warm and inviting design',
+    description: 'Warm and inviting design',
     icon: Coffee
   },
   {
     id: 'neon',
     name: 'Neon',
     preview: '⚡',
-    // description: 'Electric neon style',
+    description: 'Electric neon style',
     icon: Zap
   }
 ];
@@ -135,15 +136,6 @@ const COLOR_SCHEMES = [
   { primary: '#F97316', secondary: '#EA580C', name: 'Sunset Orange' }
 ];
 
-const QR_STYLES = [
-  { id: 'square', name: 'Square', icon: Square, description: 'Classic square dots' },
-  { id: 'rounded', name: 'Rounded', icon: Circle, description: 'Smooth rounded corners' },
-  { id: 'dots', name: 'Dots', icon: Circle, description: 'Clean circular dots' },
-  { id: 'hearts', name: 'Hearts', icon: Heart, description: 'Romantic heart shapes' },
-  { id: 'stars', name: 'Stars', icon: Star, description: 'Elegant star pattern' },
-  { id: 'hexagon', name: 'Hexagon', icon: Hexagon, description: 'Modern hexagonal design' },
-];
-
 export default function AdvancedDigitalCard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -153,10 +145,12 @@ export default function AdvancedDigitalCard() {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [downloadingImage, setDownloadingImage] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>("");
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editCardId, setEditCardId] = useState<string>("");
+  const previewRef = useRef<HTMLDivElement>(null);
   const [digitalCard, setDigitalCard] = useState<DigitalCard>({
     ownerId: user?.uid || "",
     publicId: "",
@@ -174,8 +168,8 @@ export default function AdvancedDigitalCard() {
     template: 'modern',
     primaryColor: '#3B82F6',
     secondaryColor: '#1E40AF',
-    qrStyle: 'square',
     qrEnabled: true,
+    qrLogoEnabled: false,
     updatedAt: new Date(),
   });
 
@@ -214,6 +208,7 @@ export default function AdvancedDigitalCard() {
           id: cardsSnapshot.docs[0].id,
           ...cardData,
           qrEnabled: cardData.qrEnabled ?? true,
+          qrLogoEnabled: cardData.qrLogoEnabled ?? false,
           updatedAt: cardData.updatedAt?.toDate() || new Date(),
         } as DigitalCard);
       } else {
@@ -255,6 +250,7 @@ export default function AdvancedDigitalCard() {
           id: cardSnap.id,
           ...cardData,
           qrEnabled: cardData.qrEnabled ?? true,
+          qrLogoEnabled: cardData.qrLogoEnabled ?? false,
           updatedAt: cardData.updatedAt?.toDate() || new Date(),
         } as DigitalCard);
       } else {
@@ -291,7 +287,8 @@ export default function AdvancedDigitalCard() {
         address: digitalCard.address,
       });
       
-      const qrUrl = await generateQrFromText(vCardData, digitalCard.companyLogoUrl);
+      const logoUrl = digitalCard.qrLogoEnabled && digitalCard.companyLogoUrl ? digitalCard.companyLogoUrl : undefined;
+      const qrUrl = await generateQrFromText(vCardData, logoUrl);
       setQrCodeUrl(qrUrl);
     } catch (error) {
       console.error("Error generating QR code:", error);
@@ -471,6 +468,55 @@ export default function AdvancedDigitalCard() {
     });
   };
 
+  const handleDownloadPreview = async () => {
+    if (!previewRef.current) return;
+
+    setDownloadingImage(true);
+    try {
+      // Find the card element within the preview container
+      const cardElement = previewRef.current.querySelector('[data-card-preview]') as HTMLElement;
+      if (!cardElement) {
+        throw new Error("Card preview element not found");
+      }
+
+      const canvas = await html2canvas(cardElement, {
+        scale: 3, // Higher scale for better quality
+        backgroundColor: null,
+        useCORS: true,
+        allowTaint: true,
+        imageTimeout: 10000,
+      });
+
+      // Convert canvas to blob and download
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${digitalCard.firstName}_${digitalCard.lastName}_Card.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+
+          toast({
+            title: "Success",
+            description: "Card preview downloaded successfully",
+          });
+        }
+      }, 'image/png', 1.0);
+    } catch (error) {
+      console.error("Error downloading preview:", error);
+      toast({
+        title: "Error",
+        description: "Failed to download card preview",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingImage(false);
+    }
+  };
+
   const handleCopyShareLink = () => {
     const baseUrl = import.meta.env.VITE_APP_PUBLIC_BASE_URL || window.location.origin;
     const shareUrl = `${baseUrl}/share/${digitalCard.publicId}`;
@@ -483,7 +529,7 @@ export default function AdvancedDigitalCard() {
     });
   };
 
-  const handleFieldChange = (field: keyof DigitalCard, value: string) => {
+  const handleFieldChange = (field: keyof DigitalCard, value: string | boolean) => {
     setDigitalCard(prev => ({ ...prev, [field]: value }));
   };
 
@@ -504,7 +550,8 @@ export default function AdvancedDigitalCard() {
       case 'modern':
         return (
           <div className={`${baseClasses} bg-gradient-to-br text-white`} 
-               style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor}, #ec4899)` }}>
+               style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor}, #ec4899)` }}
+               data-card-preview>
             <div className="relative p-8">
               <div className="absolute top-4 right-4">
                 {digitalCard.companyLogoUrl && (
@@ -520,9 +567,6 @@ export default function AdvancedDigitalCard() {
                       {digitalCard.firstName.charAt(0)}{digitalCard.lastName.charAt(0)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="absolute -bottom-2 -right-2 bg-yellow-400 rounded-full p-2">
-                    <Sparkles className="h-4 w-4 text-yellow-800" />
-                  </div>
                 </div>
                 <h2 className="text-2xl font-bold mb-1">{digitalCard.firstName} {digitalCard.lastName}</h2>
                 <p className="text-blue-100 font-medium mb-1">{digitalCard.title}</p>
@@ -564,7 +608,7 @@ export default function AdvancedDigitalCard() {
 
       case 'professional':
         return (
-          <div className={`${baseClasses} bg-white border-2`} style={{ borderColor: primaryColor }}>
+          <div className={`${baseClasses} bg-white border-2`} style={{ borderColor: primaryColor }} data-card-preview>
             <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-6">
               <div className="flex items-center justify-between mb-4">
                 <Avatar className="h-16 w-16 ring-2" style={{ '--tw-ring-color': primaryColor } as any}>
@@ -624,7 +668,8 @@ export default function AdvancedDigitalCard() {
       case 'creative':
         return (
           <div className={`${baseClasses} text-white relative overflow-hidden`}
-               style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}>
+               style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+               data-card-preview>
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-12 -translate-x-12"></div>
             
@@ -641,17 +686,12 @@ export default function AdvancedDigitalCard() {
               </div>
               
               <div className="text-center mb-6">
-                <div className="relative inline-block">
-                  <Avatar className="mx-auto h-20 w-20 mb-4 ring-4 ring-white/40">
-                    <AvatarImage src={digitalCard.avatarUrl} />
-                    <AvatarFallback className="bg-white/20 text-white text-xl font-bold">
-                      {digitalCard.firstName.charAt(0)}{digitalCard.lastName.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="absolute -top-2 -right-2 bg-yellow-400 rounded-full p-1">
-                    <Star className="h-3 w-3 text-yellow-800" />
-                  </div>
-                </div>
+                <Avatar className="mx-auto h-20 w-20 mb-4 ring-4 ring-white/40">
+                  <AvatarImage src={digitalCard.avatarUrl} />
+                  <AvatarFallback className="bg-white/20 text-white text-xl font-bold">
+                    {digitalCard.firstName.charAt(0)}{digitalCard.lastName.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
                 <h2 className="text-2xl font-black mb-2 bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
                   {digitalCard.firstName} {digitalCard.lastName}
                 </h2>
@@ -691,7 +731,7 @@ export default function AdvancedDigitalCard() {
 
       case 'minimal':
         return (
-          <div className={`${baseClasses} bg-white shadow-xl border border-gray-100`}>
+          <div className={`${baseClasses} bg-white shadow-xl border border-gray-100`} data-card-preview>
             <div className="p-8">
               <div className="flex items-start justify-between mb-8">
                 <div>
@@ -751,14 +791,11 @@ export default function AdvancedDigitalCard() {
 
       case 'luxury':
         return (
-          <div className={`${baseClasses} bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white relative`}>
+          <div className={`${baseClasses} bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white relative`} data-card-preview>
             <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/10 via-transparent to-yellow-600/10"></div>
             
             <div className="relative p-8">
               <div className="flex items-center justify-between mb-6">
-                <div className="w-8 h-8 bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-lg flex items-center justify-center">
-                  <Crown className="h-5 w-5 text-black" />
-                </div>
                 {digitalCard.companyLogoUrl && (
                   <img src={digitalCard.companyLogoUrl} alt="Company" className="w-12 h-12 rounded-lg bg-yellow-400/20 p-2" />
                 )}
@@ -812,7 +849,7 @@ export default function AdvancedDigitalCard() {
 
       case 'tech':
         return (
-          <div className={`${baseClasses} bg-gradient-to-br from-gray-900 to-gray-700 text-white relative overflow-hidden`}>
+          <div className={`${baseClasses} bg-gradient-to-br from-gray-900 to-gray-700 text-white relative overflow-hidden`} data-card-preview>
             <div className="absolute inset-0 opacity-10">
               <div className="absolute top-4 left-4 w-20 h-20 border border-cyan-400 rounded-lg rotate-45"></div>
               <div className="absolute bottom-8 right-8 w-16 h-16 border border-purple-400 rounded-full"></div>
@@ -872,7 +909,7 @@ export default function AdvancedDigitalCard() {
 
       case 'elegant':
         return (
-          <div className={`${baseClasses} bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200`}>
+          <div className={`${baseClasses} bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200`} data-card-preview>
             <div className="p-8">
               <div className="text-center mb-8">
                 <Avatar className="mx-auto h-20 w-20 mb-4 ring-2" style={{ '--tw-ring-color': primaryColor } as any}>
@@ -916,16 +953,13 @@ export default function AdvancedDigitalCard() {
       case 'startup':
         return (
           <div className={`${baseClasses} text-white relative overflow-hidden`}
-               style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}>
+               style={{ background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})` }}
+               data-card-preview>
             <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-20 translate-x-20"></div>
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-16 -translate-x-16"></div>
             
             <div className="relative p-8">
               <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-2">
-                  <Rocket className="h-6 w-6 text-yellow-300" />
-                  <span className="text-yellow-300 font-bold text-sm">STARTUP</span>
-                </div>
                 {digitalCard.companyLogoUrl && (
                   <img src={digitalCard.companyLogoUrl} alt="Company" className="w-12 h-12 rounded-xl bg-white/10 p-2" />
                 )}
@@ -973,10 +1007,9 @@ export default function AdvancedDigitalCard() {
 
       case 'coffee':
         return (
-          <div className={`${baseClasses} bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-200`}>
+          <div className={`${baseClasses} bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-200`} data-card-preview>
             <div className="p-8">
               <div className="flex items-center justify-between mb-6">
-                <Coffee className="h-8 w-8 text-amber-700" />
                 {digitalCard.companyLogoUrl && (
                   <img src={digitalCard.companyLogoUrl} alt="Company" className="w-12 h-12 rounded-lg object-contain" />
                 )}
@@ -1024,7 +1057,7 @@ export default function AdvancedDigitalCard() {
 
       case 'neon':
         return (
-          <div className={`${baseClasses} bg-black text-white relative overflow-hidden`}>
+          <div className={`${baseClasses} bg-black text-white relative overflow-hidden`} data-card-preview>
             <div className="absolute inset-0">
               <div className="absolute top-4 left-4 w-16 h-16 border-2 border-cyan-400 rounded-lg animate-pulse"></div>
               <div className="absolute top-8 right-8 w-12 h-12 border-2 border-pink-400 rounded-full animate-pulse"></div>
@@ -1033,10 +1066,6 @@ export default function AdvancedDigitalCard() {
             
             <div className="relative p-8">
               <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-2">
-                  <Zap className="h-6 w-6 text-cyan-400 animate-pulse" />
-                  <span className="text-cyan-400 font-bold text-sm tracking-wider">NEON</span>
-                </div>
                 {digitalCard.companyLogoUrl && (
                   <img src={digitalCard.companyLogoUrl} alt="Company" className="w-12 h-12 rounded-lg bg-white/5 p-2" />
                 )}
@@ -1415,8 +1444,9 @@ export default function AdvancedDigitalCard() {
                       />
                     </div>
 
-                    {/* QR Code Enable Toggle */}
-                    <div className="sm:col-span-2">
+                    {/* QR Code Settings */}
+                    <div className="sm:col-span-2 space-y-4">
+                      {/* Enable QR Code Toggle */}
                       <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
                         <div className="flex items-center">
                           <QrCode className="h-5 w-5 mr-3 text-purple-600" />
@@ -1432,60 +1462,77 @@ export default function AdvancedDigitalCard() {
                           className="data-[state=checked]:bg-purple-600"
                         />
                       </div>
-                    </div>
 
-                    {/* QR Code Style Selector */}
-                    <div className="sm:col-span-2">
-                      <Label className="flex items-center text-sm font-medium text-gray-700 mb-3">
-                        <QrCode className="h-4 w-4 mr-1" />
-                        QR Code Style
-                      </Label>
-                      <div className="grid grid-cols-3 gap-3">
-                        {QR_STYLES.map((style) => (
-                          <div
-                            key={style.id}
-                            className={`cursor-pointer rounded-lg p-3 border-2 transition-all duration-200 hover:scale-105 ${
-                              digitalCard.qrStyle === style.id
-                                ? 'border-purple-500 bg-purple-50 shadow-md'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                            onClick={() => setDigitalCard(prev => ({ ...prev, qrStyle: style.id }))}
-                          >
-                            <div className="flex flex-col items-center text-center">
-                              <style.icon className="h-6 w-6 mb-2 text-purple-600" />
-                              <p className="text-xs font-medium text-gray-700">{style.name}</p>
-                              <p className="text-xs text-gray-500 mt-1">{style.description}</p>
+                      {/* QR Code Logo Toggle */}
+                      {digitalCard.qrEnabled && (
+                        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
+                          <div className="flex items-center">
+                            <Building2 className="h-5 w-5 mr-3 text-green-600" />
+                            <div>
+                              <Label className="text-sm font-medium text-gray-900">QR Code Logo</Label>
+                              <p className="text-xs text-gray-600 mt-1">Embed your company logo in the center of the QR code</p>
                             </div>
                           </div>
-                        ))}
-                      </div>
+                          <Switch
+                            checked={digitalCard.qrLogoEnabled}
+                            onCheckedChange={(checked) => setDigitalCard(prev => ({ ...prev, qrLogoEnabled: checked }))}
+                            data-testid="toggle-qr-logo"
+                            className="data-[state=checked]:bg-green-600"
+                            disabled={!digitalCard.companyLogoUrl}
+                          />
+                        </div>
+                      )}
+
+                      {digitalCard.qrEnabled && digitalCard.qrLogoEnabled && !digitalCard.companyLogoUrl && (
+                        <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+                          Upload a company logo to enable QR code logo embedding.
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="mt-8 flex flex-col sm:flex-row sm:justify-between gap-4">
-                    <div className="flex space-x-3">
+                  <div className="mt-8 space-y-4">
+                    {/* Primary Actions */}
+                    <div className="flex flex-col sm:flex-row gap-3">
                       <Button 
                         onClick={handleSaveProfile} 
                         disabled={saving}
-                        className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white flex-1"
                       >
                         <Save className="h-4 w-4 mr-2" />
                         {saving ? "Saving..." : "Save Profile"}
                       </Button>
-                      <Button variant="outline" onClick={handleDownloadVCard} className="border-purple-300 text-purple-700 hover:bg-purple-50">
+                      
+                      <Button 
+                        variant="outline" 
+                        onClick={handleCopyShareLink} 
+                        className="border-blue-300 text-blue-700 hover:bg-blue-50 flex-1"
+                      >
+                        <LinkIcon className="h-4 w-4 mr-2" />
+                        Copy Link
+                      </Button>
+                    </div>
+
+                    {/* Secondary Actions */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <Button 
+                        variant="outline" 
+                        onClick={handleDownloadVCard} 
+                        className="border-purple-300 text-purple-700 hover:bg-purple-50 flex-1"
+                      >
                         <Download className="h-4 w-4 mr-2" />
                         Download vCard
                       </Button>
-                    </div>
-                    <div className="flex space-x-3">
-                      <Button variant="outline" onClick={handleDownloadQR} className="border-green-300 text-green-700 hover:bg-green-50">
+                      
+                      <Button 
+                        variant="outline" 
+                        onClick={handleDownloadQR} 
+                        className="border-green-300 text-green-700 hover:bg-green-50 flex-1"
+                        disabled={!qrCodeUrl}
+                      >
                         <QrCode className="h-4 w-4 mr-2" />
                         Download QR
-                      </Button>
-                      <Button variant="outline" onClick={handleCopyShareLink} className="border-blue-300 text-blue-700 hover:bg-blue-50">
-                        <LinkIcon className="h-4 w-4 mr-2" />
-                        Copy Link
                       </Button>
                     </div>
                   </div>
@@ -1511,12 +1558,27 @@ export default function AdvancedDigitalCard() {
                   </div>
                   
                   {/* Preview Container with proper sizing */}
-                  <div className="flex items-center justify-center min-h-[500px] max-h-[600px] overflow-auto bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4">
+                  <div 
+                    ref={previewRef}
+                    className="flex items-center justify-center min-h-[500px] max-h-[600px] overflow-auto bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-4"
+                  >
                     <div className="w-full max-w-xs">
                       {renderCardPreview()}
                     </div>
                   </div>
 
+                  {/* Download Preview Button */}
+                  <div className="mt-4 text-center">
+                    <Button
+                      variant="outline"
+                      onClick={handleDownloadPreview}
+                      disabled={downloadingImage}
+                      className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                    >
+                      <ImageIcon className="h-4 w-4 mr-2" />
+                      {downloadingImage ? "Downloading..." : "Download as PNG"}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             </div>

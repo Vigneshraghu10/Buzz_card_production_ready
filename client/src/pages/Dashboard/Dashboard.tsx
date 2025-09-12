@@ -188,19 +188,19 @@ export default function Dashboard() {
       action: () => setLocation("/bulk-uploads") 
     },
     { 
-      name: "Digital Cards", 
+      name: "Manage Digital Cards", 
       description: "Create and share smart cards.", 
       icon: CreditCard, 
       color: "from-purple-50 to-purple-100 text-purple-600 border-purple-200", 
-      action: () => setLocation("/digital-card") 
-    },
-    { 
-      name: "Manage Cards", 
-      description: "View and manage digital cards", 
-      icon: Settings, 
-      color: "from-indigo-50 to-indigo-100 text-indigo-600 border-indigo-200", 
       action: () => setLocation("/manage-cards") 
     },
+    // { 
+    //   name: "Manage Cards", 
+    //   description: "View and manage digital cards", 
+    //   icon: Settings, 
+    //   color: "from-indigo-50 to-indigo-100 text-indigo-600 border-indigo-200", 
+    //   action: () => setLocation("/manage-cards") 
+    // },
   ];
 
   const getActivityIcon = (type: string) => {
@@ -417,7 +417,7 @@ export default function Dashboard() {
                 className={`relative overflow-hidden border-0 shadow-xl backdrop-blur-sm shimmer-effect ${
                   card.name === "Digital Cards" ? "cursor-pointer hover:shadow-2xl hover:scale-105 transition-all duration-300" : ""
                 }`}
-                onClick={card.name === "Digital Cards" ? () => setLocation("/manage-cards") : undefined}
+                onClick={card.name === "Digital Cards" ? () => setLocation("#") : undefined}
                 data-testid={card.name === "Digital Cards" ? "card-digital-cards-manage" : undefined}
               >
                 <CardContent className="p-6 relative z-10">
@@ -430,7 +430,7 @@ export default function Dashboard() {
                         <p className="text-sm font-medium text-gray-600 mb-1">
                           {card.name}
                           {card.name === "Digital Cards" && (
-                            <span className="text-xs text-blue-500 ml-2">(Click to manage)</span>
+                            <span className="text-xs text-blue-500 ml-2"></span>
                           )}
                         </p>
                         <p 

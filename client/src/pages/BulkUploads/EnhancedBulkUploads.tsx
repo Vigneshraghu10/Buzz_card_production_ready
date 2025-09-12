@@ -47,7 +47,10 @@ import {
   RotateCcw,
   ArrowRight,
   MessageSquare,
-  ExternalLink
+  ExternalLink,
+  Monitor,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 interface ProcessedCard extends ParsedContact {
@@ -74,7 +77,7 @@ interface Template {
   ownerId: string;
 }
 
-// WhatsApp Icon Component (copied from Contacts)
+// WhatsApp Icon Component
 const WhatsAppIcon = ({ className = "h-4 w-4" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.890-5.335 11.893-11.893A11.821 11.821 0 0020.905 3.288z"/>
@@ -90,6 +93,19 @@ interface UploadResult {
   isFromCamera?: boolean;
   captureIndex?: number;
 }
+
+// Helper function to detect device type
+const getDeviceType = () => {
+  const userAgent = navigator.userAgent.toLowerCase();
+  const isMobile = /android|iphone|ipad|ipod|blackberry|windows phone/i.test(userAgent);
+  const isTablet = /ipad/i.test(userAgent) || (isMobile && window.innerWidth > 768);
+  
+  return {
+    isMobile: isMobile && !isTablet,
+    isTablet,
+    isDesktop: !isMobile
+  };
+};
 
 // Helper function to add delay between operations
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -116,6 +132,7 @@ export default function EnhancedBulkUploads() {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [customMessage, setCustomMessage] = useState("");
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showTemplateSelection, setShowTemplateSelection] = useState(false);
   
   // Enhanced camera and upload states
   const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
@@ -130,8 +147,12 @@ export default function EnhancedBulkUploads() {
   const [captureCount, setCaptureCount] = useState(0);
   const [cameraMode, setCameraMode] = useState<'capture' | 'processing'>('capture');
   const [pendingCaptures, setPendingCaptures] = useState<UploadResult[]>([]);
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Device detection
+  const deviceType = getDeviceType();
 
   useEffect(() => {
     if (!user) return;
@@ -194,14 +215,17 @@ export default function EnhancedBulkUploads() {
         cameraStream.getTracks().forEach(track => track.stop());
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      // Enhanced camera constraints for mobile
+      const constraints = {
         video: {
           facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          width: { ideal: deviceType.isMobile ? 1280 : 1920, max: 1920 },
+          height: { ideal: deviceType.isMobile ? 720 : 1080, max: 1080 },
+          aspectRatio: { ideal: 16/9 }
         }
-      });
+      };
 
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setCameraStream(stream);
       
       if (videoRef.current) {
@@ -212,7 +236,7 @@ export default function EnhancedBulkUploads() {
       let errorMessage = 'Failed to access camera';
       
       if (error.name === 'NotAllowedError') {
-        errorMessage = 'Camera permission denied. Please allow camera access.';
+        errorMessage = 'Camera permission denied. Please allow camera access and try again.';
       } else if (error.name === 'NotFoundError') {
         errorMessage = 'No camera found on this device.';
       } else if (error.name === 'NotSupportedError') {
@@ -262,7 +286,7 @@ export default function EnhancedBulkUploads() {
     // Draw video frame to canvas
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert to blob
+    // Convert to blob with higher quality for mobile
     canvas.toBlob(async (blob) => {
       if (!blob) return;
 
@@ -289,7 +313,7 @@ export default function EnhancedBulkUploads() {
         title: `Photo ${newCaptureCount} Captured`,
         description: "Ready to capture more or process all captures",
       });
-    }, 'image/jpeg', 0.9);
+    }, 'image/jpeg', 0.92);
   };
 
   const processAllCaptures = async () => {
@@ -618,12 +642,21 @@ export default function EnhancedBulkUploads() {
     setEditData({ ...card });
   };
 
-  // WhatsApp messaging functions (adapted from Contacts)
+  // Enhanced WhatsApp messaging functions
   const handleSendMessage = (card: ProcessedCard) => {
     setSelectedContactForMessage(card);
-    setSelectedTemplate(null);
-    setCustomMessage("");
-    setShowTemplateModal(true);
+    
+    // For mobile: Show template selection first
+    if (deviceType.isMobile && templates.length > 0) {
+      setShowTemplateSelection(true);
+      setSelectedTemplate(null);
+      setCustomMessage("");
+    } else {
+      // For desktop: Show full modal
+      setShowTemplateModal(true);
+      setSelectedTemplate(null);
+      setCustomMessage("");
+    }
   };
 
   const replacePlaceholders = (content: string, card: ProcessedCard) => {
@@ -683,7 +716,8 @@ export default function EnhancedBulkUploads() {
     }
   };
 
-  const handleSendWhatsAppMessage = () => {
+  // Enhanced WhatsApp message sending with better mobile/web detection
+  const handleSendWhatsAppMessage = (template?: Template) => {
     if (!selectedContactForMessage) return;
 
     const phoneNumber = formatPhoneNumber(selectedContactForMessage.phones?.[0] || "");
@@ -698,16 +732,10 @@ export default function EnhancedBulkUploads() {
 
     let messageContent = "";
 
-    if (selectedTemplate) {
-      messageContent = replacePlaceholders(
-        selectedTemplate.content,
-        selectedContactForMessage
-      );
+    if (template) {
+      messageContent = replacePlaceholders(template.content, selectedContactForMessage);
     } else if (customMessage.trim()) {
-      messageContent = replacePlaceholders(
-        customMessage,
-        selectedContactForMessage
-      );
+      messageContent = replacePlaceholders(customMessage, selectedContactForMessage);
     } else {
       const firstName = selectedContactForMessage.name?.split(' ')[0] || 'there';
       messageContent = `Hi ${firstName}, I hope you're doing well!`;
@@ -716,47 +744,58 @@ export default function EnhancedBulkUploads() {
     const formattedMessage = formatMessageForWhatsApp(messageContent);
 
     try {
-      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|Windows Phone/i.test(navigator.userAgent);
-      const isTablet = /iPad/i.test(navigator.userAgent);
-      
-      let whatsappUrl: string;
-      let fallbackUrl: string;
-
-      if (isMobile && !isTablet) {
-        whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
-        fallbackUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(formattedMessage)}`;
+      if (deviceType.isMobile) {
+        // Mobile WhatsApp handling
+        const whatsappUrl = `whatsapp://send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
+        const fallbackUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(formattedMessage)}`;
         
         const openAppTimeout = setTimeout(() => {
           window.open(fallbackUrl, "_blank");
-        }, 1000);
+        }, 2500);
 
+        // Try to open the app
         window.location.href = whatsappUrl;
         
-        window.addEventListener('blur', () => {
-          clearTimeout(openAppTimeout);
+        // Clear timeout if user switches back to browser
+        const handleVisibilityChange = () => {
+          if (document.hidden) {
+            clearTimeout(openAppTimeout);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+          }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        toast({
+          title: "Opening WhatsApp",
+          description: "If WhatsApp doesn't open, we'll redirect you to the web version",
         });
 
       } else {
-        whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
+        // Desktop/Web WhatsApp handling
+        const whatsappUrl = `https://web.whatsapp.com/send?phone=${phoneNumber}&text=${encodeURIComponent(formattedMessage)}`;
         
         if (whatsappUrl.length > 2000) {
           copyMessageToClipboard(formattedMessage);
           window.open(`https://web.whatsapp.com/send?phone=${phoneNumber}`, "_blank");
           toast({
             title: "Message Too Long",
-            description: "Message copied to clipboard. Please paste it manually in WhatsApp.",
+            description: "Message copied to clipboard. Please paste it manually in WhatsApp Web.",
           });
         } else {
           window.open(whatsappUrl, "_blank");
           toast({
             title: "Success",
-            description: "WhatsApp opened with pre-filled message",
+            description: "WhatsApp Web opened with pre-filled message",
           });
         }
       }
       
+      // Close modals
       setShowTemplateModal(false);
+      setShowTemplateSelection(false);
       setSelectedContactForMessage(null);
+      setSelectedTemplate(null);
       
     } catch (error) {
       console.error("WhatsApp error:", error);
@@ -845,14 +884,14 @@ export default function EnhancedBulkUploads() {
     return (
       <div className="py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Processing Results</h2>
               <p className="text-gray-600">
                 Found {processed.filter(p => p.status === 'success').length} business cards
               </p>
             </div>
-            <div className="flex space-x-4">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -860,10 +899,14 @@ export default function EnhancedBulkUploads() {
                   setProcessed([]);
                   setFiles([]);
                 }}
+                className="w-full sm:w-auto"
               >
                 Process More
               </Button>
-              <Button onClick={saveAllContacts}>
+              <Button 
+                onClick={saveAllContacts}
+                className="w-full sm:w-auto"
+              >
                 Save All Contacts
               </Button>
             </div>
@@ -877,7 +920,7 @@ export default function EnhancedBulkUploads() {
                   <Users className="h-4 w-4 mr-2" />
                   Assign to Groups (Optional)
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {groups.map(group => (
                     <div key={group.id} className="flex items-center space-x-2">
                       <Checkbox
@@ -891,7 +934,7 @@ export default function EnhancedBulkUploads() {
                           }
                         }}
                       />
-                      <label htmlFor={`group-${group.id}`} className="text-sm cursor-pointer">
+                      <label htmlFor={`group-${group.id}`} className="text-sm cursor-pointer truncate">
                         {group.name}
                       </label>
                     </div>
@@ -901,69 +944,104 @@ export default function EnhancedBulkUploads() {
             </Card>
           )}
 
-          <div className="grid grid-cols-1 gap-6">
+          <div className="space-y-6">
             {processed.map((card, index) => (
               <Card key={card.id} className={`${
                 card.status === 'error' ? 'border-red-200 bg-red-50' : 
                 card.saved ? 'border-green-200 bg-green-50' : 'border-gray-200'
               }`}>
                 <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <CardTitle className="flex items-center text-lg">
                       {card.status === 'error' ? (
-                        <XCircle className="h-5 w-5 text-red-500 mr-2" />
+                        <XCircle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0" />
                       ) : card.saved ? (
-                        <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+                        <CheckCircle className="h-5 w-5 text-green-500 mr-2 flex-shrink-0" />
                       ) : (
-                        <Camera className="h-5 w-5 text-blue-500 mr-2" />
+                        <Camera className="h-5 w-5 text-blue-500 mr-2 flex-shrink-0" />
                       )}
-                      {card.status === 'error' ? 'Processing Error' : card.name || 'Unnamed Contact'}
-                      {card.isFromCamera && (
-                        <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                          Camera
-                        </span>
-                      )}
-                      {card.qrCodes && card.qrCodes.length > 0 && (
-                        <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">
-                          QR
-                        </span>
-                      )}
+                      <span className="truncate">
+                        {card.status === 'error' ? 'Processing Error' : card.name || 'Unnamed Contact'}
+                      </span>
+                      <div className="flex items-center gap-2 ml-2">
+                        {card.isFromCamera && (
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full whitespace-nowrap">
+                            Camera
+                          </span>
+                        )}
+                        {card.qrCodes && card.qrCodes.length > 0 && (
+                          <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full whitespace-nowrap">
+                            QR
+                          </span>
+                        )}
+                      </div>
                     </CardTitle>
+                    
+                    {/* Mobile-responsive action buttons */}
                     {card.status === 'success' && !card.saved && (
-                      <div className="flex space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSendMessage(card)}
-                          disabled={!card.phones || card.phones.length === 0}
-                          className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                          data-testid={`button-whatsapp-${card.id}`}
-                        >
-                          <WhatsAppIcon className="h-4 w-4 mr-1" />
-                          WhatsApp
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditCard(card)}
-                          data-testid={`button-edit-${card.id}`}
-                        >
-                          <Edit className="h-4 w-4 mr-1" />
-                          Edit
-                        </Button>
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        {/* Mobile: Stack buttons vertically */}
+                        <div className="flex gap-2 sm:hidden">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSendMessage(card)}
+                            disabled={!card.phones || card.phones.length === 0}
+                            className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50 text-xs"
+                            data-testid={`button-whatsapp-${card.id}`}
+                          >
+                            <WhatsAppIcon className="h-3 w-3 mr-1" />
+                            WhatsApp
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditCard(card)}
+                            className="flex-1 text-xs"
+                            data-testid={`button-edit-${card.id}`}
+                          >
+                            <Edit className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        </div>
                         <Button
                           size="sm"
                           onClick={() => saveContact(card)}
                           disabled={saving === card.id}
+                          className="w-full sm:w-auto text-xs"
                           data-testid={`button-save-${card.id}`}
                         >
                           {saving === card.id ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
                           ) : (
-                            <Save className="h-4 w-4 mr-1" />
+                            <Save className="h-3 w-3 mr-1" />
                           )}
                           Save
                         </Button>
+                        
+                        {/* Desktop: Horizontal layout */}
+                        <div className="hidden sm:flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSendMessage(card)}
+                            disabled={!card.phones || card.phones.length === 0}
+                            className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                            data-testid={`button-whatsapp-${card.id}`}
+                          >
+                            <WhatsAppIcon className="h-4 w-4 mr-1" />
+                            WhatsApp
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditCard(card)}
+                            data-testid={`button-edit-${card.id}`}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -975,102 +1053,223 @@ export default function EnhancedBulkUploads() {
                       {card.error}
                     </div>
                   ) : (
-                    <div className="flex space-x-4">
-                      {card.imageUrl && (
-                        <div className="flex-shrink-0">
-                          <img 
-                            src={card.imageUrl} 
-                            alt="Business card" 
-                            className="w-32 h-20 object-cover rounded-lg shadow-md"
-                          />
-                        </div>
-                      )}
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-sm font-medium text-gray-500">Company</Label>
-                          <p className="mt-1">{card.company || "Not provided"}</p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-gray-500">Email</Label>
-                          <p className="mt-1">{card.email || "Not provided"}</p>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-gray-500">Phone Numbers</Label>
-                          <div className="mt-1 space-y-1">
-                            {card.phones && card.phones.length > 0 ? (
-                              card.phones.map((phone, idx) => (
-                                <div key={idx} className="flex items-center space-x-2" data-testid={`phone-mobile-${idx}`}>
-                                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                                  <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded border" data-testid={`text-phone-${idx}`}>
-                                    {phone}
-                                  </span>
-                                  <span className="text-xs text-gray-500">Mobile</span>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-gray-500 text-sm">Not provided</p>
+                    <div className="space-y-4">
+                      {/* Mobile: Expandable view */}
+                      <div className="sm:hidden">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setExpandedCard(expandedCard === card.id ? null : card.id)}
+                          className="w-full justify-between p-0 h-auto"
+                        >
+                          <span className="text-sm text-gray-600">
+                            {card.company || "Company not provided"} • {card.email || "No email"}
+                          </span>
+                          {expandedCard === card.id ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </Button>
+                        
+                        {expandedCard === card.id && (
+                          <div className="mt-4 space-y-3">
+                            {card.imageUrl && (
+                              <div className="flex justify-center">
+                                <img 
+                                  src={card.imageUrl} 
+                                  alt="Business card" 
+                                  className="w-full max-w-xs h-32 object-cover rounded-lg shadow-md"
+                                />
+                              </div>
                             )}
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-sm font-medium text-gray-500">Landlines</Label>
-                          <div className="mt-1 space-y-1">
-                            {card.landlines && card.landlines.length > 0 ? (
-                              card.landlines.map((landline, idx) => (
-                                <div key={idx} className="flex items-center space-x-2" data-testid={`phone-landline-${idx}`}>
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                                  <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded border" data-testid={`text-landline-${idx}`}>
-                                    {landline}
-                                  </span>
-                                  <span className="text-xs text-gray-500">Landline</span>
+                            <div className="grid grid-cols-1 gap-3">
+                              <div>
+                                <Label className="text-xs font-medium text-gray-500">Company</Label>
+                                <p className="mt-1 text-sm">{card.company || "Not provided"}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs font-medium text-gray-500">Email</Label>
+                                <p className="mt-1 text-sm break-all">{card.email || "Not provided"}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs font-medium text-gray-500">Phone Numbers</Label>
+                                <div className="mt-1 space-y-1">
+                                  {card.phones && card.phones.length > 0 ? (
+                                    card.phones.map((phone, idx) => (
+                                      <div key={idx} className="flex items-center space-x-2" data-testid={`phone-mobile-${idx}`}>
+                                        <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                                        <span className="text-xs font-mono bg-gray-50 px-2 py-1 rounded border break-all" data-testid={`text-phone-${idx}`}>
+                                          {phone}
+                                        </span>
+                                        <span className="text-xs text-gray-500 flex-shrink-0">Mobile</span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <p className="text-gray-500 text-xs">Not provided</p>
+                                  )}
                                 </div>
-                              ))
-                            ) : (
-                              <p className="text-gray-500 text-sm">Not provided</p>
-                            )}
+                              </div>
+                              {card.landlines && card.landlines.length > 0 && (
+                                <div>
+                                  <Label className="text-xs font-medium text-gray-500">Landlines</Label>
+                                  <div className="mt-1 space-y-1">
+                                    {card.landlines.map((landline, idx) => (
+                                      <div key={idx} className="flex items-center space-x-2" data-testid={`phone-landline-${idx}`}>
+                                        <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                                        <span className="text-xs font-mono bg-gray-50 px-2 py-1 rounded border break-all" data-testid={`text-landline-${idx}`}>
+                                          {landline}
+                                        </span>
+                                        <span className="text-xs text-gray-500 flex-shrink-0">Landline</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {card.website && (
+                                <div>
+                                  <Label className="text-xs font-medium text-gray-500">Website</Label>
+                                  <div className="mt-1">
+                                    <a
+                                      href={!/^https?:\/\//i.test(card.website.trim()) ? `https://${card.website.trim()}` : card.website.trim()}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800 underline text-xs font-mono bg-gray-50 px-2 py-1 rounded border flex items-center space-x-1 w-fit break-all"
+                                      data-testid="link-website"
+                                    >
+                                      <span className="truncate">{card.website}</span>
+                                      <ExternalLink className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+                              {card.services && (
+                                <div>
+                                  <Label className="text-xs font-medium text-gray-500">Services/Position</Label>
+                                  <p className="mt-1 text-sm">{card.services}</p>
+                                </div>
+                              )}
+                              {card.address && (
+                                <div>
+                                  <Label className="text-xs font-medium text-gray-500">Address</Label>
+                                  <p className="mt-1 text-sm">{card.address}</p>
+                                </div>
+                              )}
+                              {card.qrCodes && card.qrCodes.length > 0 && (
+                                <div>
+                                  <Label className="text-xs font-medium text-gray-500">QR Code Data</Label>
+                                  <div className="mt-1 space-y-2">
+                                    {card.qrCodes.map((qr, idx) => (
+                                      <div key={idx} className="bg-purple-100 p-2 rounded text-xs break-all">
+                                        <span className="font-medium capitalize">{qr.type}:</span> {qr.data}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        {card.website && (
+                        )}
+                      </div>
+
+                      {/* Desktop: Full view */}
+                      <div className="hidden sm:flex sm:space-x-4">
+                        {card.imageUrl && (
+                          <div className="flex-shrink-0">
+                            <img 
+                              src={card.imageUrl} 
+                              alt="Business card" 
+                              className="w-32 h-20 object-cover rounded-lg shadow-md"
+                            />
+                          </div>
+                        )}
+                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-sm font-medium text-gray-500">Website</Label>
-                            <div className="mt-1">
-                              <a
-                                href={!/^https?:\/\//i.test(card.website.trim()) ? `https://${card.website.trim()}` : card.website.trim()}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 underline text-sm font-mono bg-gray-50 px-2 py-1 rounded border flex items-center space-x-1 w-fit"
-                                data-testid="link-website"
-                              >
-                                <span>{card.website}</span>
-                                <ExternalLink className="h-3 w-3 text-blue-500" />
-                              </a>
+                            <Label className="text-sm font-medium text-gray-500">Company</Label>
+                            <p className="mt-1">{card.company || "Not provided"}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">Email</Label>
+                            <p className="mt-1 break-all">{card.email || "Not provided"}</p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">Phone Numbers</Label>
+                            <div className="mt-1 space-y-1">
+                              {card.phones && card.phones.length > 0 ? (
+                                card.phones.map((phone, idx) => (
+                                  <div key={idx} className="flex items-center space-x-2" data-testid={`phone-mobile-${idx}`}>
+                                    <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
+                                    <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded border" data-testid={`text-phone-${idx}`}>
+                                      {phone}
+                                    </span>
+                                    <span className="text-xs text-gray-500">Mobile</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-gray-500 text-sm">Not provided</p>
+                              )}
                             </div>
                           </div>
-                        )}
-                        {card.services && (
-                          <div className="md:col-span-2">
-                            <Label className="text-sm font-medium text-gray-500">Services/Position</Label>
-                            <p className="mt-1">{card.services}</p>
-                          </div>
-                        )}
-                        {card.address && (
-                          <div className="md:col-span-2">
-                            <Label className="text-sm font-medium text-gray-500">Address</Label>
-                            <p className="mt-1">{card.address}</p>
-                          </div>
-                        )}
-                        {card.qrCodes && card.qrCodes.length > 0 && (
-                          <div className="md:col-span-2">
-                            <Label className="text-sm font-medium text-gray-500">QR Code Data</Label>
-                            <div className="mt-1 space-y-2">
-                              {card.qrCodes.map((qr, idx) => (
-                                <div key={idx} className="bg-purple-100 p-2 rounded text-sm">
-                                  <span className="font-medium capitalize">{qr.type}:</span> {qr.data}
-                                </div>
-                              ))}
+                          <div>
+                            <Label className="text-sm font-medium text-gray-500">Landlines</Label>
+                            <div className="mt-1 space-y-1">
+                              {card.landlines && card.landlines.length > 0 ? (
+                                card.landlines.map((landline, idx) => (
+                                  <div key={idx} className="flex items-center space-x-2" data-testid={`phone-landline-${idx}`}>
+                                    <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
+                                    <span className="text-sm font-mono bg-gray-50 px-2 py-1 rounded border" data-testid={`text-landline-${idx}`}>
+                                      {landline}
+                                    </span>
+                                    <span className="text-xs text-gray-500">Landline</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-gray-500 text-sm">Not provided</p>
+                              )}
                             </div>
                           </div>
-                        )}
+                          {card.website && (
+                            <div>
+                              <Label className="text-sm font-medium text-gray-500">Website</Label>
+                              <div className="mt-1">
+                                <a
+                                  href={!/^https?:\/\//i.test(card.website.trim()) ? `https://${card.website.trim()}` : card.website.trim()}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 underline text-sm font-mono bg-gray-50 px-2 py-1 rounded border flex items-center space-x-1 w-fit"
+                                  data-testid="link-website"
+                                >
+                                  <span>{card.website}</span>
+                                  <ExternalLink className="h-3 w-3 text-blue-500" />
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                          {card.services && (
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-500">Services/Position</Label>
+                              <p className="mt-1">{card.services}</p>
+                            </div>
+                          )}
+                          {card.address && (
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-500">Address</Label>
+                              <p className="mt-1">{card.address}</p>
+                            </div>
+                          )}
+                          {card.qrCodes && card.qrCodes.length > 0 && (
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-500">QR Code Data</Label>
+                              <div className="mt-1 space-y-2">
+                                {card.qrCodes.map((qr, idx) => (
+                                  <div key={idx} className="bg-purple-100 p-2 rounded text-sm break-all">
+                                    <span className="font-medium capitalize">{qr.type}:</span> {qr.data}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1080,9 +1279,9 @@ export default function EnhancedBulkUploads() {
           </div>
         </div>
 
-        {/* Edit Dialog */}
+        {/* Edit Dialog - Enhanced for mobile */}
         <Dialog open={!!editingCard} onOpenChange={() => setEditingCard(null)}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Contact Information</DialogTitle>
             </DialogHeader>
@@ -1142,462 +1341,108 @@ export default function EnhancedBulkUploads() {
                 />
               </div>
             </div>
-            <div className="flex justify-end space-x-2 mt-6">
-              <Button variant="outline" onClick={() => setEditingCard(null)}>
+            <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6">
+              <Button 
+                variant="outline" 
+                onClick={() => setEditingCard(null)}
+                className="w-full sm:w-auto"
+              >
                 Cancel
               </Button>
-              <Button onClick={saveEditedCard}>
+              <Button 
+                onClick={saveEditedCard}
+                className="w-full sm:w-auto"
+              >
                 Save Changes
               </Button>
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-    );
-  }
 
-  return (
-    <div className="py-6">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
-        <div className="mb-8">
-          <div className="flex items-center space-x-3 mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <Sparkles className="text-white h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-bold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent sm:text-4xl sm:truncate">
-                AI Business Card Scanner
-              </h2>
-              <p className="mt-1 text-lg text-gray-600">
-                Extract data from multiple business cards with advanced AI detection
-              </p>
-            </div>
-          </div>
-          
-          {/* AI Features Banner */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
-              <Brain className="h-8 w-8 text-blue-600" />
-              <div>
-                <h3 className="font-semibold text-blue-900">AI-Powered</h3>
-                <p className="text-sm text-blue-700">Advanced text recognition</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3 bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-xl border border-green-200">
-              <Camera className="h-8 w-8 text-green-600" />
-              <div>
-                <h3 className="font-semibold text-green-900">Multi-Card Detection</h3>
-                <p className="text-sm text-green-700">Process multiple cards at once</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3 bg-gradient-to-r from-purple-50 to-violet-50 p-4 rounded-xl border border-purple-200">
-              <QrCode className="h-8 w-8 text-purple-600" />
-              <div>
-                <h3 className="font-semibold text-purple-900">QR Support</h3>
-                <p className="text-sm text-purple-700">vCard & MeCard detection</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200">
-              <CheckCircle2 className="h-8 w-8 text-amber-600" />
-              <div>
-                <h3 className="font-semibold text-amber-900">Smart Detection</h3>
-                <p className="text-sm text-amber-700">Automatic duplicate check</p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Usage Status */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200 mt-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Zap className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="font-medium text-blue-900">
-                    {hasActiveSubscription ? 'Premium Plan Active' : 'Free Plan'}
-                  </p>
-                  <p className="text-sm text-blue-700">
-                    {hasActiveSubscription 
-                      ? 'Unlimited AI scans available' 
-                      : `${usage.aiScansCount}/${limits.aiScans} AI scans used`
-                    }
-                  </p>
-                </div>
-              </div>
-              {!canUseAIScan && (
-                <Button 
-                  size="sm" 
-                  onClick={() => setShowLimitModal(true)}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600"
-                >
-                  Upgrade Now
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Upload Zone */}
-        <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 mb-8">
-          <CardContent className="p-0">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <FileImage className="h-6 w-6" />
-                  <h3 className="text-lg font-semibold">Smart Upload Zone</h3>
-                </div>
-                <div className="bg-white/20 px-3 py-1 rounded-full text-sm font-medium">
-                  {files.length > 0 ? `${files.length}/10 files` : 'Ready'}
-                </div>
-              </div>
-            </div>
+        {/* Mobile Template Selection Dialog */}
+        <Dialog open={showTemplateSelection} onOpenChange={setShowTemplateSelection}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center space-x-2">
+                <WhatsAppIcon className="h-5 w-5 text-green-600" />
+                <span>Choose Template</span>
+              </DialogTitle>
+            </DialogHeader>
             
-            {/* Upload Area */}
-            <div 
-              className="p-8 border-2 border-dashed border-purple-200 m-6 rounded-2xl hover:border-purple-400 transition-all duration-300 hover:bg-purple-50/50"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (checkUsageLimit()) {
-                  handleFileSelect(e.dataTransfer.files);
-                }
-              }}
-            >
-              <div className="text-center">
-                <div className="mx-auto w-20 h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mb-6">
-                  <CloudUpload className="text-purple-600 h-10 w-10" />
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-2">Drop Your Business Cards Here</h3>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                  <Button 
-                    onClick={() => {
-                      if (checkUsageLimit()) {
-                        const input = document.createElement('input');
-                        input.type = 'file';
-                        input.multiple = true;
-                        input.accept = 'image/jpeg,image/png,image/gif,image/webp';
-                        input.onchange = (e) => {
-                          const files = (e.target as HTMLInputElement).files;
-                          if (files) handleFileSelect(files);
-                        };
-                        input.click();
-                      }
-                    }}
-                    disabled={processing}
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-md disabled:opacity-50 transition-all duration-200"
-                    size="sm"
-                  >
-                    {processing ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <CloudUpload className="h-4 w-4 mr-2" />
-                        Process
-                      </>
-                    )}
-                  </Button>
-                  
-                  <Dialog open={showCamera} onOpenChange={setShowCamera}>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (checkUsageLimit()) {
-                            setShowCamera(true);
-                            startCamera();
-                          }
-                        }}
-                        disabled={processing}
-                        className="border-blue-300 text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition-all duration-200"
-                        size="sm"
-                      >
-                        <Camera className="h-4 w-4 mr-2" />
-                        Camera
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[900px] max-h-[90vh]">
-                      <DialogHeader>
-                        <DialogTitle className="flex items-center space-x-2">
-                          <Camera className="h-5 w-5" />
-                          <span>Capture Business Cards</span>
-                          {pendingCaptures.length > 0 && (
-                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
-                              {pendingCaptures.length} captured
-                            </span>
-                          )}
-                        </DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        {cameraError ? (
-                          <div className="text-center py-12">
-                            <CameraOff className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                            <p className="text-red-600 mb-4">{cameraError}</p>
-                            <Button onClick={startCamera} variant="outline">
-                              <RotateCcw className="h-4 w-4 mr-2" />
-                              Try Again
-                            </Button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="relative bg-black rounded-lg overflow-hidden">
-                              <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="w-full h-96 object-cover"
-                              />
-                              {/* Camera overlay */}
-                              <div className="absolute inset-0 pointer-events-none">
-                                <div className="absolute inset-4 border-2 border-white/50 rounded-lg">
-                                  <ScanLine className="absolute top-2 left-2 h-6 w-6 text-white/75" />
-                                  <div className="absolute top-2 left-1/2 transform -translate-x-1/2 text-white/75 text-sm font-medium">
-                                    Position card within frame ({captureCount}/10)
-                                  </div>
-                                  {pendingCaptures.length > 0 && (
-                                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs">
-                                      {pendingCaptures.length} card{pendingCaptures.length > 1 ? 's' : ''} ready to process
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Pending captures preview */}
-                            {pendingCaptures.length > 0 && (
-                              <div className="bg-gray-50 rounded-lg p-4">
-                                <h4 className="text-sm font-medium text-gray-900 mb-3">Captured Photos ({pendingCaptures.length})</h4>
-                                <div className="flex space-x-2 overflow-x-auto">
-                                  {pendingCaptures.map((capture, index) => (
-                                    <div key={capture.id} className="flex-shrink-0 relative">
-                                      <div className="w-16 h-10 bg-gray-200 rounded border-2 border-green-300 flex items-center justify-center">
-                                        <Camera className="h-4 w-4 text-green-600" />
-                                      </div>
-                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                                        {index + 1}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {cameraMode === 'capture' ? (
-                              <div className="flex justify-center space-x-4">
-                                <Button
-                                  onClick={switchCamera}
-                                  variant="outline"
-                                  size="sm"
-                                >
-                                  <RotateCcw className="h-4 w-4 mr-2" />
-                                  Switch Camera
-                                </Button>
-                                <Button
-                                  onClick={capturePhoto}
-                                  className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 px-8"
-                                  disabled={!cameraStream || captureCount >= 10}
-                                >
-                                  <Camera className="h-4 w-4 mr-2" />
-                                  Capture ({captureCount}/10)
-                                </Button>
-                                {pendingCaptures.length > 0 && (
-                                  <>
-                                    <Button
-                                      onClick={processAllCaptures}
-                                      className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-6"
-                                    >
-                                      <ArrowRight className="h-4 w-4 mr-2" />
-                                      Process All ({pendingCaptures.length})
-                                    </Button>
-                                    <Button
-                                      onClick={clearCaptures}
-                                      variant="outline"
-                                      size="sm"
-                                    >
-                                      Clear
-                                    </Button>
-                                  </>
-                                )}
-                                <Button
-                                  onClick={stopCamera}
-                                  variant="outline"
-                                  size="sm"
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="text-center py-8">
-                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Processing Captures</h3>
-                                <p className="text-gray-600">Please wait while we extract contact information...</p>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-                
-                <div className="mt-4 text-center">
-                  <p className="text-sm text-gray-500">Or drag and drop files</p>
-                  <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB each • Max 10 files</p>
-                  <p className="text-xs text-purple-600 mt-1 flex items-center justify-center">
-                    <QrCode className="h-3 w-3 mr-1" />
-                    QR codes automatically detected
+            <div className="space-y-3">
+              {selectedContactForMessage && (
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-xs text-gray-600 mb-1">Sending to:</p>
+                  <p className="font-medium text-sm">{selectedContactForMessage.name || 'Unknown Contact'}</p>
+                  <p className="text-xs text-gray-500">
+                    {selectedContactForMessage.phones?.[0] ? formatPhoneNumber(selectedContactForMessage.phones[0]) : 'No phone number'}
                   </p>
                 </div>
+              )}
+
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {templates.map((template) => (
+                  <Button
+                    key={template.id}
+                    variant="outline"
+                    onClick={() => handleSendWhatsAppMessage(template)}
+                    className="w-full justify-start text-left h-auto p-3"
+                  >
+                    <div className="w-full">
+                      <div className="font-medium text-sm mb-1">{template.name}</div>
+                      <div className="text-xs text-gray-600 truncate">
+                        {template.content.length > 80 
+                          ? template.content.substring(0, 80) + '...' 
+                          : template.content}
+                      </div>
+                    </div>
+                  </Button>
+                ))}
+                
+                {/* Quick message option */}
+                <Button
+                  variant="outline"
+                  onClick={() => handleSendWhatsAppMessage()}
+                  className="w-full justify-start text-left h-auto p-3"
+                >
+                  <div className="w-full">
+                    <div className="font-medium text-sm mb-1">Quick Message</div>
+                    <div className="text-xs text-gray-600">
+                      Send a simple greeting message
+                    </div>
+                  </div>
+                </Button>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowTemplateSelection(false);
+                    setSelectedContactForMessage(null);
+                  }}
+                  className="w-full"
+                >
+                  Cancel
+                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
 
-        {/* Selected Files */}
-        {files.length > 0 && (
-          <Card className="mb-8 border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
-            <CardContent className="p-0">
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <FileText className="h-6 w-6" />
-                    <h3 className="text-lg font-semibold">Selected Files ({files.length})</h3>
-                  </div>
-                  <div className="text-sm opacity-90">
-                    Ready for processing
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-6">
-                <div className="space-y-2">
-                  {files.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                      <div className="flex items-center">
-                        <Camera className="h-4 w-4 text-gray-500 mr-2" />
-                        <span className="text-sm font-medium">{file.name}</span>
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                        </span>
-                        {file.name.includes('camera-capture') && (
-                          <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
-                            Camera
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(index)}
-                        disabled={processing}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="mt-6">
-                  <Button
-                    onClick={processFiles}
-                    disabled={processing || files.length === 0}
-                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-3 text-lg font-semibold"
-                  >
-                    {processing ? (
-                      <>
-                        <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        Processing {currentFile}...
-                      </>
-                    ) : (
-                      <>
-                        <Brain className="h-5 w-5 mr-2" />
-                        Process {files.length} Image{files.length !== 1 ? 's' : ''} with AI
-                      </>
-                    )}
-                  </Button>
-                  
-                  {processing && (
-                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-center justify-between text-xs text-blue-700 mb-2">
-                        <span className="flex items-center">
-                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                          Processing
-                        </span>
-                        <span className="font-medium">{Math.round(progress)}%</span>
-                      </div>
-                      <Progress value={progress} className="w-full h-2" />
-                      {currentFile && (
-                        <p className="text-xs text-blue-600 mt-2 truncate">
-                          {currentFile}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Features Info */}
-        {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
-            <CardContent className="p-6 text-center">
-              <div className="p-3 bg-blue-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
-                <Camera className="h-10 w-10 text-blue-600" />
-              </div>
-              <h3 className="font-semibold mb-2">Multi-Card Detection</h3>
-              <p className="text-sm text-gray-600">
-                Advanced AI detects and processes multiple business cards in a single image
-              </p>
-            </CardContent>
-          </Card>
-          
-          <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
-            <CardContent className="p-6 text-center">
-              <div className="p-3 bg-green-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-green-200 transition-colors">
-                <Eye className="h-10 w-10 text-green-600" />
-              </div>
-              <h3 className="font-semibold mb-2">QR Code & vCard Support</h3>
-              <p className="text-sm text-gray-600">
-                Extracts contact data from QR codes, vCards, and MeCards automatically
-              </p>
-            </CardContent>
-          </Card>
-          
-          <Card className="group hover:shadow-lg transition-all duration-300 border-0 shadow-md">
-            <CardContent className="p-6 text-center">
-              <div className="p-3 bg-purple-100 rounded-full w-16 h-16 mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
-                <Users className="h-10 w-10 text-purple-600" />
-              </div>
-              <h3 className="font-semibold mb-2">Smart Data Organization</h3>
-              <p className="text-sm text-gray-600">
-                Automatically categorizes mobile numbers, landlines, and contact details
-              </p>
-            </CardContent>
-          </Card>
-        </div> */}
-
-        {/* Usage Limit Modal */}
-        <UsageLimitModal
-          isOpen={showLimitModal}
-          onClose={() => setShowLimitModal(false)}
-          feature="aiScan"
-          currentCount={usage.aiScansCount}
-          limit={limits.aiScans}
-        />
-
-        {/* WhatsApp Template Modal */}
+        {/* Desktop WhatsApp Template Modal */}
         <Dialog open={showTemplateModal} onOpenChange={setShowTemplateModal}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center space-x-2">
                 <WhatsAppIcon className="h-5 w-5 text-green-600" />
                 <span>Send WhatsApp Message</span>
+                {deviceType.isDesktop && (
+                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full flex items-center">
+                    <Monitor className="h-3 w-3 mr-1" />
+                    Web
+                  </span>
+                )}
               </DialogTitle>
             </DialogHeader>
             
@@ -1615,7 +1460,7 @@ export default function EnhancedBulkUploads() {
               {templates.length > 0 && (
                 <div>
                   <Label className="text-sm font-medium">Choose a Template (Optional)</Label>
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
                     {templates.map((template) => (
                       <div
                         key={template.id}
@@ -1666,7 +1511,7 @@ export default function EnhancedBulkUploads() {
               {(selectedTemplate || customMessage) && selectedContactForMessage && (
                 <div>
                   <Label className="text-sm font-medium">Message Preview</Label>
-                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg max-h-32 overflow-y-auto">
                     <p className="text-sm text-green-800 whitespace-pre-wrap">
                       {selectedTemplate && !customMessage.trim()
                         ? replacePlaceholders(selectedTemplate.content, selectedContactForMessage)
@@ -1678,7 +1523,7 @@ export default function EnhancedBulkUploads() {
                 </div>
               )}
 
-              <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -1687,13 +1532,14 @@ export default function EnhancedBulkUploads() {
                     setCustomMessage('');
                     setSelectedContactForMessage(null);
                   }}
+                  className="w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
                 <Button
-                  onClick={handleSendWhatsAppMessage}
+                  onClick={() => handleSendWhatsAppMessage(selectedTemplate)}
                   disabled={!selectedContactForMessage?.phones?.[0] || (!selectedTemplate && !customMessage.trim())}
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto"
                 >
                   <WhatsAppIcon className="h-4 w-4 mr-2" />
                   Send Message
@@ -1702,6 +1548,453 @@ export default function EnhancedBulkUploads() {
             </div>
           </DialogContent>
         </Dialog>
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+        <div className="mb-8">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
+              <Sparkles className="text-white h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold leading-7 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent sm:text-4xl sm:truncate">
+                AI Business Card Scanner
+              </h2>
+              <p className="mt-1 text-base sm:text-lg text-gray-600">
+                Extract data from multiple business cards with advanced AI detection
+              </p>
+            </div>
+          </div>
+          
+          {/* AI Features Banner - Enhanced mobile layout */}
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 rounded-xl border border-blue-200">
+              <Brain className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-blue-900 text-sm sm:text-base">AI-Powered</h3>
+                <p className="text-xs sm:text-sm text-blue-700 truncate">Advanced text recognition</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 rounded-xl border border-green-200">
+              <Camera className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-green-900 text-sm sm:text-base">Multi-Card Detection</h3>
+                <p className="text-xs sm:text-sm text-green-700 truncate">Process multiple cards at once</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-purple-50 to-violet-50 p-3 sm:p-4 rounded-xl border border-purple-200">
+              <QrCode className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-purple-900 text-sm sm:text-base">QR Support</h3>
+                <p className="text-xs sm:text-sm text-purple-700 truncate">Supports QR code links</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-amber-50 to-orange-50 p-3 sm:p-4 rounded-xl border border-amber-200">
+              <CheckCircle2 className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-amber-900 text-sm sm:text-base">Smart Detection</h3>
+                <p className="text-xs sm:text-sm text-amber-700 truncate">Automatic duplicate check</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Usage Status - Enhanced mobile layout */}
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-4 border border-blue-200 mt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <Zap className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium text-blue-900 text-sm sm:text-base">
+                    {hasActiveSubscription ? 'Premium Plan Active' : 'Free Plan'}
+                  </p>
+                  <p className="text-xs sm:text-sm text-blue-700">
+                    {hasActiveSubscription 
+                      ? 'Unlimited AI scans available' 
+                      : `${usage.aiScansCount}/${limits.aiScans} AI scans used`
+                    }
+                  </p>
+                </div>
+              </div>
+              {!canUseAIScan && (
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowLimitModal(true)}
+                  className="bg-gradient-to-r from-blue-600 to-purple-600 w-full sm:w-auto"
+                >
+                  Upgrade Now
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Upload Zone - Enhanced mobile responsiveness */}
+        <Card className="overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-white to-gray-50 mb-8">
+          <CardContent className="p-0">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-4 sm:p-6 text-white">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center space-x-3">
+                  <FileImage className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+                  <h3 className="text-base sm:text-lg font-semibold">Smart Upload Zone</h3>
+                </div>
+                <div className="bg-white/20 px-3 py-1 rounded-full text-xs sm:text-sm font-medium">
+                  {files.length > 0 ? `${files.length}/10 files` : 'Ready'}
+                </div>
+              </div>
+            </div>
+            
+            {/* Upload Area */}
+            <div 
+              className="p-4 sm:p-8 border-2 border-dashed border-purple-200 m-4 sm:m-6 rounded-2xl hover:border-purple-400 transition-all duration-300 hover:bg-purple-50/50"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (checkUsageLimit()) {
+                  handleFileSelect(e.dataTransfer.files);
+                }
+              }}
+            >
+              <div className="text-center">
+                <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 rounded-2xl mb-4 sm:mb-6">
+                  <CloudUpload className="text-purple-600 h-8 w-8 sm:h-10 sm:w-10" />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Drop Your Business Cards Here</h3>
+                <div className="flex flex-col gap-3 sm:gap-4 justify-center items-center">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button 
+                      onClick={() => {
+                        if (checkUsageLimit()) {
+                          const input = document.createElement('input');
+                          input.type = 'file';
+                          input.multiple = true;
+                          input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+                          input.onchange = (e) => {
+                            const files = (e.target as HTMLInputElement).files;
+                            if (files) handleFileSelect(files);
+                          };
+                          input.click();
+                        }
+                      }}
+                      disabled={processing}
+                      className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-md disabled:opacity-50 transition-all duration-200 w-full sm:w-auto"
+                      size="sm"
+                    >
+                      {processing ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CloudUpload className="h-4 w-4 mr-2" />
+                          Select Files
+                        </>
+                      )}
+                    </Button>
+                    
+                    <Dialog open={showCamera} onOpenChange={setShowCamera}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            if (checkUsageLimit()) {
+                              setShowCamera(true);
+                              startCamera();
+                            }
+                          }}
+                          disabled={processing}
+                          className="border-blue-300 text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg font-medium transition-all duration-200 w-full sm:w-auto"
+                          size="sm"
+                        >
+                          <Camera className="h-4 w-4 mr-2" />
+                          {deviceType.isMobile ? 'Camera' : 'Use Camera'}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[900px] max-h-[95vh] overflow-hidden p-2 sm:p-6">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <Camera className="h-5 w-5" />
+                              <span>Capture Business Cards</span>
+                            </div>
+                            {pendingCaptures.length > 0 && (
+                              <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                                {pendingCaptures.length} captured
+                              </span>
+                            )}
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          {cameraError ? (
+                            <div className="text-center py-8 sm:py-12">
+                              <CameraOff className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-4" />
+                              <p className="text-red-600 mb-4 text-sm sm:text-base px-4">{cameraError}</p>
+                              <Button onClick={startCamera} variant="outline" size="sm">
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                                Try Again
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="relative bg-black rounded-lg overflow-hidden">
+                                <video
+                                  ref={videoRef}
+                                  autoPlay
+                                  playsInline
+                                  muted
+                                  className="w-full h-64 sm:h-96 object-cover"
+                                />
+                                {/* Camera overlay - Enhanced for mobile */}
+                                <div className="absolute inset-0 pointer-events-none">
+                                  <div className="absolute inset-2 sm:inset-4 border-2 border-white/50 rounded-lg">
+                                    <ScanLine className="absolute top-1 left-1 sm:top-2 sm:left-2 h-4 w-4 sm:h-6 sm:w-6 text-white/75" />
+                                    <div className="absolute top-1 sm:top-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs sm:text-sm font-medium">
+                                      Position card within frame ({captureCount}/10)
+                                    </div>
+                                    {pendingCaptures.length > 0 && (
+                                      <div className="absolute bottom-1 sm:bottom-2 left-1/2 transform -translate-x-1/2 text-white/75 text-xs">
+                                        {pendingCaptures.length} card{pendingCaptures.length > 1 ? 's' : ''} ready to process
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Pending captures preview - Mobile optimized */}
+                              {pendingCaptures.length > 0 && (
+                                <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                                  <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2 sm:mb-3">
+                                    Captured Photos ({pendingCaptures.length})
+                                  </h4>
+                                  <div className="flex space-x-2 overflow-x-auto">
+                                    {pendingCaptures.map((capture, index) => (
+                                      <div key={capture.id} className="flex-shrink-0 relative">
+                                        <div className="w-12 h-8 sm:w-16 sm:h-10 bg-gray-200 rounded border-2 border-green-300 flex items-center justify-center">
+                                          <Camera className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+                                        </div>
+                                        <div className="absolute -top-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
+                                          {index + 1}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {cameraMode === 'capture' ? (
+                                <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-4">
+                                  {/* Mobile: Stack vertically */}
+                                  <div className="flex gap-2 sm:hidden">
+                                    <Button
+                                      onClick={switchCamera}
+                                      variant="outline"
+                                      size="sm"
+                                      className="flex-1"
+                                    >
+                                      <RotateCcw className="h-3 w-3 mr-1" />
+                                      Switch
+                                    </Button>
+                                    <Button
+                                      onClick={capturePhoto}
+                                      className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                                      disabled={!cameraStream || captureCount >= 10}
+                                      size="sm"
+                                    >
+                                      <Camera className="h-3 w-3 mr-1" />
+                                      Capture
+                                    </Button>
+                                  </div>
+                                  
+                                  {/* Desktop: Horizontal */}
+                                  <div className="hidden sm:flex gap-4">
+                                    <Button
+                                      onClick={switchCamera}
+                                      variant="outline"
+                                      size="sm"
+                                    >
+                                      <RotateCcw className="h-4 w-4 mr-2" />
+                                      Switch Camera
+                                    </Button>
+                                    <Button
+                                      onClick={capturePhoto}
+                                      className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 px-8"
+                                      disabled={!cameraStream || captureCount >= 10}
+                                    >
+                                      <Camera className="h-4 w-4 mr-2" />
+                                      Capture ({captureCount}/10)
+                                    </Button>
+                                  </div>
+
+                                  {pendingCaptures.length > 0 && (
+                                    <>
+                                      <Button
+                                        onClick={processAllCaptures}
+                                        className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 w-full sm:w-auto"
+                                        size="sm"
+                                      >
+                                        <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                                        Process All ({pendingCaptures.length})
+                                      </Button>
+                                      <div className="flex gap-2 sm:gap-4">
+                                        <Button
+                                          onClick={clearCaptures}
+                                          variant="outline"
+                                          size="sm"
+                                          className="flex-1 sm:flex-none"
+                                        >
+                                          Clear
+                                        </Button>
+                                        <Button
+                                          onClick={stopCamera}
+                                          variant="outline"
+                                          size="sm"
+                                          className="flex-1 sm:flex-none"
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </>
+                                  )}
+                                  
+                                  {pendingCaptures.length === 0 && (
+                                    <Button
+                                      onClick={stopCamera}
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full sm:w-auto"
+                                    >
+                                      Cancel
+                                    </Button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-center py-6 sm:py-8">
+                                  <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">Processing Captures</h3>
+                                  <p className="text-sm sm:text-base text-gray-600">Please wait while we extract contact information...</p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+                
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-gray-500">Or drag and drop files</p>
+                  <p className="text-xs text-gray-400 mt-1">PNG, JPG, WebP up to 10MB each • Max 10 files</p>
+                  <p className="text-xs text-purple-600 mt-1 flex items-center justify-center">
+                    <QrCode className="h-3 w-3 mr-1" />
+                    QR codes automatically detected
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Selected Files - Enhanced mobile layout */}
+        {files.length > 0 && (
+          <Card className="mb-8 border-0 shadow-xl bg-gradient-to-br from-white to-gray-50">
+            <CardContent className="p-0">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 sm:p-6 text-white">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="h-5 w-5 sm:h-6 sm:w-6 flex-shrink-0" />
+                    <h3 className="text-base sm:text-lg font-semibold">Selected Files ({files.length})</h3>
+                  </div>
+                  <div className="text-xs sm:text-sm opacity-90">
+                    Ready for processing
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-4 sm:p-6">
+                <div className="space-y-2">
+                  {files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center min-w-0 flex-1">
+                        <Camera className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 mr-2 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm font-medium truncate">{file.name}</span>
+                        <span className="text-xs text-gray-500 ml-1 sm:ml-2 flex-shrink-0">
+                          ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                        </span>
+                        {file.name.includes('camera-capture') && (
+                          <span className="ml-1 sm:ml-2 text-xs bg-green-100 text-green-800 px-1 sm:px-2 py-1 rounded-full whitespace-nowrap">
+                            Camera
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        disabled={processing}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 flex-shrink-0 h-6 w-6 sm:h-8 sm:w-8 p-0"
+                      >
+                        <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="mt-6">
+                  <Button
+                    onClick={processFiles}
+                    disabled={processing || files.length === 0}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white py-2 sm:py-3 text-sm sm:text-lg font-semibold"
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 mr-2 animate-spin" />
+                        Processing {currentFile}...
+                      </>
+                    ) : (
+                      <>
+                        <Brain className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                        Process {files.length} Image{files.length !== 1 ? 's' : ''} with AI
+                      </>
+                    )}
+                  </Button>
+                  
+                  {processing && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center justify-between text-xs text-blue-700 mb-2">
+                        <span className="flex items-center">
+                          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                          Processing
+                        </span>
+                        <span className="font-medium">{Math.round(progress)}%</span>
+                      </div>
+                      <Progress value={progress} className="w-full h-2" />
+                      {currentFile && (
+                        <p className="text-xs text-blue-600 mt-2 truncate">
+                          {currentFile}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Usage Limit Modal */}
+        <UsageLimitModal
+          isOpen={showLimitModal}
+          onClose={() => setShowLimitModal(false)}
+          feature="aiScan"
+          currentCount={usage.aiScansCount}
+          limit={limits.aiScans}
+        />
 
         {/* Hidden canvas for camera capture */}
         <canvas ref={canvasRef} className="hidden" />

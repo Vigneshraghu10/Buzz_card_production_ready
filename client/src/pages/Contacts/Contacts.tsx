@@ -1418,7 +1418,7 @@ function Contacts() {
                       type="url"
                       value={formData.website}
                       onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                      placeholder="https://example.com"
+                      // placeholder="https://example.com"
                       disabled={saving}
                       data-testid="input-website"
                     />
@@ -1430,7 +1430,7 @@ function Contacts() {
                       type="url"
                       value={formData.qrCodeUrl}
                       onChange={(e) => setFormData(prev => ({ ...prev, qrCodeUrl: e.target.value }))}
-                      placeholder="https://example.com/qr-code"
+                      // placeholder="https://example.com/qr-code"
                       disabled={saving}
                     />
                   </div>

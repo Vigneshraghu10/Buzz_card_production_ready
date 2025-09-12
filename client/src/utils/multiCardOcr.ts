@@ -338,56 +338,6 @@ function normalizePhoneNumber(phone: string): string {
 }
 
 /**
- * Enhanced phone number categorization with international support
- */
-function categorizePhoneNumbers(phones: string[]): { phones: string[]; landlines: string[] } {
-  const mobilePhones: string[] = [];
-  const landlines: string[] = [];
-  
-  for (const phone of phones) {
-    const cleaned = normalizePhoneNumber(phone);
-    if (!cleaned) continue;
-    
-    const digitsOnly = cleaned.replace(/\+/, '');
-    
-    // Enhanced mobile detection logic
-    let isMobile = false;
-    
-    if (cleaned.startsWith('+1')) {
-      // US/Canada - more sophisticated detection needed
-      isMobile = digitsOnly.length === 11;
-    } else if (cleaned.startsWith('+91')) {
-      // India - mobile numbers start with 6-9
-      const firstDigit = digitsOnly.charAt(2);
-      isMobile = digitsOnly.length === 12 && /[6-9]/.test(firstDigit);
-    } else if (cleaned.startsWith('+44')) {
-      // UK - mobile numbers start with 7
-      const thirdDigit = digitsOnly.charAt(2);
-      isMobile = thirdDigit === '7';
-    } else if (cleaned.startsWith('+49')) {
-      // Germany - mobile numbers start with 15, 16, 17
-      const prefix = digitsOnly.substring(2, 4);
-      isMobile = ['15', '16', '17'].includes(prefix);
-    } else if (cleaned.length >= 10 && cleaned.length <= 15) {
-      // Generic international mobile detection
-      isMobile = cleaned.startsWith('+');
-    } else if (!cleaned.startsWith('+') && digitsOnly.length === 10) {
-      // Domestic numbers - basic heuristic
-      const firstDigit = digitsOnly.charAt(0);
-      isMobile = /[6-9]/.test(firstDigit);
-    }
-    
-    if (isMobile) {
-      mobilePhones.push(phone);
-    } else {
-      landlines.push(phone);
-    }
-  }
-  
-  return { phones: mobilePhones, landlines };
-}
-
-/**
  * Clean and validate extracted text fields
  */
 function cleanExtractedField(value: any, type: 'text' | 'email' | 'url' | 'phone' = 'text'): string {
@@ -447,7 +397,7 @@ IMPORTANT INSTRUCTIONS:
 - Look carefully for multiple business cards in the image (side by side, overlapping, etc.)
 - Extract text accurately, don't hallucinate information
 - Pay special attention to phone numbers, emails, and names
-- Distinguish between mobile phones and landlines when possible
+- Include ALL phone numbers (mobile and landline) in a single "phones" array
 - Clean up any OCR artifacts or unclear text
 
 For each business card found, return this JSON structure:
@@ -458,8 +408,7 @@ For each business card found, return this JSON structure:
     "name": "Full name (first and last name)",
     "company": "Company or organization name",
     "email": "email@domain.com",
-    "phones": ["mobile numbers only"],
-    "landlines": ["landline numbers only"],
+    "phones": ["all phone numbers including mobile and landline"],
     "services": "Job title, position, or services description",
     "address": "Complete address with street, city, state/province, postal code",
     "website": "Website URL (include https://)",
@@ -470,9 +419,9 @@ For each business card found, return this JSON structure:
 
 RULES:
 - Return a JSON array even for single cards
-- Use empty arrays [] for missing phones/landlines
+- Use empty arrays [] for missing phones
 - Use empty string "" for missing text fields  
-- Separate mobile and landline numbers correctly
+- Include ALL phone numbers in the same "phones" array (don't separate mobile/landline)
 - Include country codes when visible
 - Extract complete, properly formatted addresses
 - Don't guess or make up information
@@ -593,20 +542,16 @@ RULES:
           }
           if (cardData.social) cleanedCard.social = cleanExtractedField(cardData.social, 'text');
 
-          // Process and categorize phone numbers
+          // Process all phone numbers into a single array
           const allPhones: string[] = [];
           
           if (Array.isArray(cardData.phones)) {
             allPhones.push(...cardData.phones.map((p: any) => cleanExtractedField(p, 'phone')).filter(Boolean));
           }
-          if (Array.isArray(cardData.landlines)) {
-            allPhones.push(...cardData.landlines.map((p: any) => cleanExtractedField(p, 'phone')).filter(Boolean));
-          }
           
+          // Remove duplicates and set phones array
           if (allPhones.length > 0) {
-            const { phones, landlines } = categorizePhoneNumbers(allPhones);
-            if (phones.length > 0) cleanedCard.phones = phones;
-            if (landlines.length > 0) cleanedCard.landlines = landlines;
+            cleanedCard.phones = [...new Set(allPhones)];
           }
 
           // Merge QR code data if available and relevant
@@ -625,14 +570,11 @@ RULES:
                 if (qrContact.address && !cleanedCard.address) cleanedCard.address = qrContact.address;
                 if (qrContact.services && !cleanedCard.services) cleanedCard.services = qrContact.services;
                 
-                // Merge phone numbers
+                // Merge phone numbers into single phones array
                 if (qrContact.phones && Array.isArray(qrContact.phones)) {
-                  const { phones: qrPhones, landlines: qrLandlines } = categorizePhoneNumbers(qrContact.phones);
+                  const qrPhones = qrContact.phones.map(normalizePhoneNumber).filter(Boolean);
                   if (qrPhones.length > 0) {
                     cleanedCard.phones = [...new Set([...(cleanedCard.phones || []), ...qrPhones])];
-                  }
-                  if (qrLandlines.length > 0) {
-                    cleanedCard.landlines = [...new Set([...(cleanedCard.landlines || []), ...qrLandlines])];
                   }
                 }
               }
@@ -641,7 +583,7 @@ RULES:
 
           // Final validation - only add card if it has substantial information
           const hasSubstantialInfo = cleanedCard.name || cleanedCard.company || 
-                                   cleanedCard.email || cleanedCard.phones || cleanedCard.landlines;
+                                   cleanedCard.email || cleanedCard.phones;
           
           if (hasSubstantialInfo) {
             // Remove empty fields
@@ -750,9 +692,6 @@ export function mergeDuplicateContacts(contacts: ParsedContact[]): ParsedContact
         
         if (other.phones) {
           contact.phones = [...new Set([...(contact.phones || []), ...other.phones])];
-        }
-        if (other.landlines) {
-          contact.landlines = [...new Set([...(contact.landlines || []), ...other.landlines])];
         }
         if (other.qrCodes) {
           contact.qrCodes = [...(contact.qrCodes || []), ...other.qrCodes];
@@ -922,13 +861,7 @@ export class ContactExporter {
       
       if (contact.phones) {
         contact.phones.forEach(phone => {
-          vcard.push(`TEL;TYPE=CELL:${phone}`);
-        });
-      }
-      
-      if (contact.landlines) {
-        contact.landlines.forEach(phone => {
-          vcard.push(`TEL;TYPE=WORK:${phone}`);
+          vcard.push(`TEL:${phone}`);
         });
       }
       
@@ -944,8 +877,7 @@ export class ContactExporter {
    */
   static toCSV(contacts: ParsedContact[]): string {
     const headers = [
-      'Name', 'Company', 'Email', 'Mobile Phones', 'Landlines', 
-      'Services', 'Address', 'Website', 'Social'
+      'Name', 'Company', 'Email', 'Phones', 'Services', 'Address', 'Website', 'Social'
     ];
     
     const rows = contacts.map(contact => [
@@ -953,7 +885,6 @@ export class ContactExporter {
       contact.company || '',
       contact.email || '',
       (contact.phones || []).join('; '),
-      (contact.landlines || []).join('; '),
       contact.services || '',
       contact.address || '',
       contact.website || '',
@@ -1008,12 +939,11 @@ export function assessContactQuality(contact: ParsedContact): {
     issues.push('Missing email');
   }
   
-  if (contact.phones || contact.landlines) {
+  if (contact.phones) {
     score += 20;
     fieldsPresent++;
     
-    const allPhones = [...(contact.phones || []), ...(contact.landlines || [])];
-    if (allPhones.some(phone => phone.replace(/\D/g, '').length < 7)) {
+    if (contact.phones.some(phone => phone.replace(/\D/g, '').length < 7)) {
       issues.push('Some phone numbers seem too short');
       score -= 5;
     }
@@ -1134,8 +1064,8 @@ function calculateContactSimilarity(contact1: ParsedContact, contact2: ParsedCon
   }
   
   // Phone number overlap
-  const phones1 = [...(contact1.phones || []), ...(contact1.landlines || [])];
-  const phones2 = [...(contact2.phones || []), ...(contact2.landlines || [])];
+  const phones1 = contact1.phones || [];
+  const phones2 = contact2.phones || [];
   
   if (phones1.length > 0 && phones2.length > 0) {
     total++;
@@ -1232,10 +1162,6 @@ function mergeContactInformation(target: ParsedContact, source: ParsedContact): 
     target.phones = [...new Set([...(target.phones || []), ...source.phones])];
   }
   
-  if (source.landlines) {
-    target.landlines = [...new Set([...(target.landlines || []), ...source.landlines])];
-  }
-  
   // Merge QR codes
   if (source.qrCodes) {
     target.qrCodes = [...(target.qrCodes || []), ...source.qrCodes];
@@ -1249,6 +1175,5 @@ export {
   parseMeCard,
   extractContactFromText,
   normalizePhoneNumber,
-  categorizePhoneNumbers,
   cleanExtractedField
 };
