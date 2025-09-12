@@ -69,6 +69,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Subscription status endpoint
+  app.get('/api/subscription/:userId', (req, res) => {
+    // For now, return a default response since subscription system is not fully implemented
+    // In a real implementation, you would query your database for subscription data
+    res.json({
+      hasSubscription: false,
+      planName: null,
+      endDate: null,
+      isActive: false
+    });
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });

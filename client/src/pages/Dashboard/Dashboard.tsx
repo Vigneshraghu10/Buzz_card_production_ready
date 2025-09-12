@@ -88,17 +88,19 @@ export default function Dashboard() {
           const subscriptionResponse = await fetch(`/api/subscription/${user.uid}`);
           if (subscriptionResponse.ok) {
             const subscription = await subscriptionResponse.json();
-            if (subscription) {
-              setSubscriptionStatus({
-                hasSubscription: true,
-                planName: subscription.planId === 'basic_yearly' ? 'Basic Plan' : 'Premium Plan',
-                endDate: new Date(subscription.endDate),
-                isActive: subscription.isActive
-              });
-            }
+            setSubscriptionStatus({
+              hasSubscription: subscription.hasSubscription || false,
+              planName: subscription.planName,
+              endDate: subscription.endDate ? new Date(subscription.endDate) : undefined,
+              isActive: subscription.isActive || false
+            });
+          } else {
+            console.warn(`Subscription API returned ${subscriptionResponse.status}: ${subscriptionResponse.statusText}`);
           }
         } catch (error) {
           console.error("Error fetching subscription:", error);
+          // Set default subscription status on error
+          setSubscriptionStatus({ hasSubscription: false });
         }
 
         // Fetch recent activities from contacts with source information
