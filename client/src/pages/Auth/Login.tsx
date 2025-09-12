@@ -376,7 +376,7 @@ export default function Login() {
       </div>
 
       {/* Add custom keyframes for animations */}
-      <style jsx>{`
+      <style>{`
         @keyframes slideInUp {
           from {
             opacity: 0;
