@@ -539,8 +539,12 @@ export default function ScannedCards() {
                     <p className="mt-1 text-lg">{extractedData.data.email || "Not provided"}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-500">Phone Number</Label>
-                    <p className="mt-1 text-lg">{extractedData.data.phone || "Not provided"}</p>
+                    <Label className="text-sm font-medium text-gray-500">Phone Numbers</Label>
+                    <p className="mt-1 text-lg">
+                      {extractedData.data.phones && extractedData.data.phones.length > 0 
+                        ? extractedData.data.phones.join(', ') 
+                        : "Not provided"}
+                    </p>
                   </div>
                   <div className="md:col-span-2">
                     <Label className="text-sm font-medium text-gray-500">Services/Position</Label>
