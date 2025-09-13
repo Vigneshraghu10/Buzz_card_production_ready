@@ -1588,7 +1588,7 @@ export default function EnhancedBulkUploads() {
 
       toast({
         title: "Feedback Submitted",
-        description: "Thank you for your feedback! It helps us improve the AI Card Scanner.",
+        description: "Woohoo! Feedback delivered 🚀!",
       });
 
       // Close feedback form after successful submission
@@ -1851,7 +1851,7 @@ export default function EnhancedBulkUploads() {
                                   <h4 className="text-xs sm:text-sm font-medium text-gray-900 mb-2 sm:mb-3">
                                     Captured Photos ({pendingCaptures.length})
                                   </h4>
-                                  <div className="flex space-x-2 overflow-x-auto">
+                                  <div className="grid grid-cols-5 gap-2">
                                     {pendingCaptures.map((capture, index) => (
                                       <div key={capture.id} className="flex-shrink-0 relative">
                                         <div className="w-12 h-8 sm:w-16 sm:h-10 bg-gray-200 rounded border-2 border-green-300 flex items-center justify-center">
