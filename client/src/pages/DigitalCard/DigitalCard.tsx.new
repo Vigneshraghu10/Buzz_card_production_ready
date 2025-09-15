@@ -1,0 +1,42 @@
+import { useEffect, useState, useRef } from "react";
+import { useLocation } from "react-router-dom";
+import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, getDoc } from "firebase/firestore";
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../hooks/use-toast';
+import { useUsageLimits } from '../../hooks/useUsageLimits';
+import { db } from '../../lib/firebase';
+import html2canvas from 'html2canvas';
+import { uploadToStorage } from '../../utils/upload';
+import { buildVCard } from '../../utils/vcard';
+import { generateQrFromText } from '../../utils/qr';
+import { Phone, Mail, Globe, Users, Crown, Laptop, Diamond, Rocket, Coffee, Zap, Briefcase, Paintbrush, Sparkles } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '../../components/ui/avatar';
+import { Card } from '../../components/ui/card';
+import { UsageLimitModal } from '../../components/UsageLimitModal';
+
+interface DigitalCard {
+  id?: string;
+  ownerId: string;
+  publicId: string;
+  avatarUrl?: string;
+  companyLogoUrl?: string;
+  firstName: string;
+  lastName: string;
+  title: string;
+  company: string;
+  email: string;
+  phone: string;
+  website: string;
+  address: string;
+  services: string;
+  testimonials: string;
+  isPublic: boolean;
+  template: string;
+  primaryColor: string;
+  secondaryColor: string;
+  qrEnabled: boolean;
+  qrLogoEnabled: boolean;
+  updatedAt: Date;
+}
+
+// Rest of your existing code...

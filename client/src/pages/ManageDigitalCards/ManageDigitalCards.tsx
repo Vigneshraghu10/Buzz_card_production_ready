@@ -10,12 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { buildVCard } from "@/utils/vcard";
 import { generateQrFromText } from "@/utils/qr";
-import html2canvas from "html2canvas";
 import { 
   CreditCard, Search, Edit, Download, Share2, Trash2, 
-  Plus, Eye, Calendar, Building2, User, Globe, FileText, QrCode, Image as ImageIcon, Mail, Phone
+  Plus, Eye, Calendar, Building2, User, Globe, FileText, QrCode
 } from "lucide-react";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 interface DigitalCard {
   id: string;
@@ -53,7 +51,6 @@ export default function ManageDigitalCards() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredCards, setFilteredCards] = useState<DigitalCard[]>([]);
   const [downloadingCards, setDownloadingCards] = useState<Set<string>>(new Set());
-  const [qrCodes, setQrCodes] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (user) {
@@ -96,9 +93,6 @@ export default function ManageDigitalCards() {
       });
       
       setDigitalCards(sortedCards);
-      
-      // Generate QR codes for all cards
-      await generateQrCodesForCards(sortedCards);
     } catch (error) {
       console.error("Error fetching digital cards:", error);
       toast({
@@ -109,32 +103,6 @@ export default function ManageDigitalCards() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const generateQrCodesForCards = async (cards: DigitalCard[]) => {
-    const newQrCodes = new Map<string, string>();
-    
-    for (const card of cards) {
-      try {
-        const vCardContent = buildVCard({
-          firstName: card.firstName,
-          lastName: card.lastName,
-          title: card.title,
-          company: card.company,
-          email: card.email,
-          phone: card.phone,
-          website: card.website,
-          address: card.address
-        });
-        
-        const qrDataUrl = await generateQrFromText(vCardContent);
-        newQrCodes.set(card.id, qrDataUrl);
-      } catch (error) {
-        console.error(`Error generating QR code for card ${card.id}:`, error);
-      }
-    }
-    
-    setQrCodes(newQrCodes);
   };
 
   const handleCreateNew = () => {
@@ -212,96 +180,6 @@ export default function ManageDigitalCards() {
       toast({
         title: "Download Failed",
         description: "Failed to download vCard file",
-        variant: "destructive",
-      });
-    } finally {
-      setDownloadingCards(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(card.id);
-        return newSet;
-      });
-    }
-  };
-
-  const waitForImages = (element: HTMLElement): Promise<void> => {
-    const images = element.querySelectorAll('img');
-    const promises: Promise<void>[] = [];
-
-    images.forEach(img => {
-      if (img.complete && img.naturalWidth > 0) {
-        return; // Image already loaded
-      }
-
-      promises.push(
-        new Promise((resolve) => {
-          const handleLoad = () => {
-            img.removeEventListener('load', handleLoad);
-            img.removeEventListener('error', handleError);
-            resolve();
-          };
-          
-          const handleError = () => {
-            img.removeEventListener('load', handleLoad);
-            img.removeEventListener('error', handleError);
-            resolve(); // Continue even if image fails
-          };
-
-          img.addEventListener('load', handleLoad);
-          img.addEventListener('error', handleError);
-        })
-      );
-    });
-
-    return Promise.all(promises).then(() => {});
-  };
-
-  const handleDownloadPreview = async (card: DigitalCard) => {
-    try {
-      setDownloadingCards(prev => new Set(prev).add(card.id));
-
-      // Find the card preview element
-      const cardElement = document.querySelector(`[data-card-preview="${card.id}"]`);
-      if (!cardElement) {
-        throw new Error("Card preview element not found");
-      }
-
-      // Wait for all images to load
-      await waitForImages(cardElement as HTMLElement);
-
-      // Generate screenshot using html2canvas
-      const canvas = await html2canvas(cardElement as HTMLElement, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: false, // Changed to false for CORS safety
-        imageTimeout: 15000,
-        backgroundColor: null,
-      });
-
-      // Convert to blob and download
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          throw new Error("Failed to generate image blob");
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${card.firstName || 'Contact'}_${card.lastName || 'Card'}_Preview.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        toast({
-          title: "Download Complete",
-          description: "Card preview downloaded successfully",
-        });
-      }, 'image/png', 1.0);
-    } catch (error) {
-      console.error("Error downloading preview:", error);
-      toast({
-        title: "Download Failed", 
-        description: error instanceof Error ? error.message : "Failed to download card preview",
         variant: "destructive",
       });
     } finally {
@@ -473,78 +351,36 @@ export default function ManageDigitalCards() {
               <CardContent className="p-6">
                 {/* Card Preview */}
                 <div 
-                  className="h-48 rounded-lg mb-4 p-4 text-white relative overflow-hidden"
+                  className="h-40 rounded-lg mb-4 p-4 text-white relative overflow-hidden"
                   style={{ 
                     background: `linear-gradient(135deg, ${card.primaryColor || '#3B82F6'}, ${card.secondaryColor || '#1E40AF'})` 
                   }}
-                  data-card-preview={card.id}
                 >
                   <div className="absolute inset-0 bg-black/10"></div>
-                  <div className="relative z-10 h-full flex flex-col">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        {card.avatarUrl ? (
-                          <Avatar className="w-12 h-12 ring-2 ring-white/30">
-                            <AvatarImage src={card.avatarUrl} crossOrigin="anonymous" />
-                            <AvatarFallback className="bg-white/20 text-white font-bold">
-                              {card.firstName?.charAt(0)}{card.lastName?.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                            <User className="h-6 w-6 text-white" />
-                          </div>
-                        )}
-                      </div>
+                  <div className="relative z-10">
+                    <div className="flex items-center space-x-3 mb-3">
+                      {card.avatarUrl ? (
+                        <img 
+                          src={card.avatarUrl} 
+                          alt="Avatar" 
+                          className="w-10 h-10 rounded-full object-cover bg-white/20"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                          <User className="h-5 w-5 text-white" />
+                        </div>
+                      )}
                       {card.companyLogoUrl && (
                         <img 
                           src={card.companyLogoUrl} 
                           alt="Company" 
-                          className="w-10 h-10 rounded object-contain bg-white/20 p-1"
-                          crossOrigin="anonymous"
+                          className="w-8 h-8 rounded object-contain bg-white/20 p-1"
                         />
                       )}
                     </div>
-                    
-                    <div className="flex-1">
-                      <h3 className="font-bold text-lg mb-1">{card.firstName || ''} {card.lastName || ''}</h3>
-                      <p className="text-sm opacity-90 mb-1">{card.title || 'No title'}</p>
-                      <p className="text-xs opacity-75 mb-3">{card.company || 'No company'}</p>
-                      
-                      {/* Contact Info */}
-                      <div className="space-y-1">
-                        {card.email && (
-                          <div className="flex items-center text-xs">
-                            <Mail className="h-3 w-3 mr-2" />
-                            <span className="truncate">{card.email}</span>
-                          </div>
-                        )}
-                        {card.phone && (
-                          <div className="flex items-center text-xs">
-                            <Phone className="h-3 w-3 mr-2" />
-                            <span>{card.phone}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* QR Code */}
-                    <div className="flex justify-center mt-auto">
-                      <div className="bg-white p-2 rounded-lg">
-                        {qrCodes.get(card.id) ? (
-                          <img 
-                            src={qrCodes.get(card.id)} 
-                            alt="QR Code" 
-                            className="w-8 h-8 object-contain" 
-                            crossOrigin="anonymous"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 bg-gray-300 rounded flex items-center justify-center">
-                            <QrCode className="h-4 w-4 text-gray-600" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <h3 className="font-bold text-lg">{card.firstName || ''} {card.lastName || ''}</h3>
+                    <p className="text-sm opacity-90">{card.title || 'No title'}</p>
+                    <p className="text-xs opacity-75">{card.company || 'No company'}</p>
                   </div>
                 </div>
 
@@ -598,12 +434,12 @@ export default function ManageDigitalCards() {
                     </div>
                     
                     {/* Download Actions Row */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="flex space-x-2">
                       <Button 
                         variant="outline" 
                         size="sm" 
                         onClick={() => handleDownloadVCard(card)}
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                        className="flex-1 text-green-600 hover:text-green-700 hover:bg-green-50"
                         disabled={downloadingCards.has(card.id)}
                         data-testid={`button-download-vcard-${card.id}`}
                       >
@@ -617,23 +453,8 @@ export default function ManageDigitalCards() {
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => handleDownloadPreview(card)}
-                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                        disabled={downloadingCards.has(card.id)}
-                        data-testid={`button-download-png-${card.id}`}
-                      >
-                        {downloadingCards.has(card.id) ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-1"></div>
-                        ) : (
-                          <ImageIcon className="h-4 w-4 mr-1" />
-                        )}
-                        PNG
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
                         onClick={() => handleDownloadQR(card)}
-                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                         disabled={downloadingCards.has(card.id)}
                         data-testid={`button-download-qr-${card.id}`}
                       >

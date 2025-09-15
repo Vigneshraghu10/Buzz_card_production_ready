@@ -1,15 +1,23 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function isSignedIn() { return request.auth != null; }
+    
+    // Helper function: check if signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-    // Store under /users/{uid}/...
+    // Allow each user to access only their own files
     match /users/{uid}/{allPaths=**} {
+      // Read: user can read only their files
+      // Signed download URLs (getDownloadURL) will also work
       allow read: if isSignedIn() && request.auth.uid == uid;
+
+      // Write: user can upload/modify only their files
       allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
-    // Block all else
+    // Deny everything else
     match /{allPaths=**} {
       allow read, write: if false;
     }
