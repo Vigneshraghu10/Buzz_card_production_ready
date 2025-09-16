@@ -1612,15 +1612,7 @@ export default function AdvancedDigitalCard() {
 
                   {/* Download Preview Button */}
                   <div className="mt-4 text-center">
-                    <Button
-                      variant="outline"
-                      onClick={handleDownloadPreview}
-                      disabled={downloadingImage}
-                      className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                    >
-                      <ImageIcon className="h-4 w-4 mr-2" />
-                      {downloadingImage ? "Downloading..." : "Download as PNG"}
-                    </Button>
+                    
                   </div>
                 </CardContent>
               </Card>
