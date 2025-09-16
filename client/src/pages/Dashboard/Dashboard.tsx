@@ -365,7 +365,7 @@ export default function Dashboard() {
                 <Button 
                   variant="outline" 
                   className="border-green-300 text-green-700 hover:bg-green-100"
-                  onClick={() => setLocation("/pricing")}
+                  onClick={() => setLocation("#")}
                 >
                   <Crown className="h-4 w-4 mr-2" />
                   Manage
