@@ -69,12 +69,12 @@ const navigation = [
     description: "Tap to share contacts",
     isComingSoon: true
   },
-  {
-    name: "Pricing",
-    href: "/pricing",
-    icon: DollarSign,
-    description: "Subscription plans"
-  }
+  // {
+  //   name: "Pricing",
+  //   href: "/pricing",
+  //   icon: DollarSign,
+  //   description: "Subscription plans"
+  // }
 ];
 
 export default function Sidebar() {
