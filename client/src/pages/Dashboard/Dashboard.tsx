@@ -392,7 +392,7 @@ export default function Dashboard() {
                 </div>
                 <Button 
                   className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
-                  onClick={() => setLocation("/pricing")}
+                  onClick={() => setLocation("#")}
                 >
                   <Crown className="h-4 w-4 mr-2" />
                   Upgrade Now
