@@ -53,7 +53,7 @@ export default function UsageLimitModal({
 
   const handleUpgrade = () => {
     onClose();
-    setLocation("/pricing");
+    setLocation("#");
   };
 
   return (
